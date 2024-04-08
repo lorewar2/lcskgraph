@@ -1,8 +1,6 @@
 
 //obtained from rustbio library and modified//
 use std::cmp::{max, Ordering};
-
-use petgraph::Direction::Outgoing;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Topo;
 
@@ -30,13 +28,14 @@ pub struct Alignment {
 
 #[derive(Debug, Clone)]
 pub struct TracebackCell {
-    score: i32,
+    dp_score: i32,
+    temp_match: i32,
     op: AlignmentOperation,
 }
 
 impl Ord for TracebackCell {
     fn cmp(&self, other: &TracebackCell) -> Ordering {
-        self.score.cmp(&other.score)
+        self.dp_score.cmp(&other.dp_score)
     }
 }
 
@@ -48,7 +47,7 @@ impl PartialOrd for TracebackCell {
 
 impl PartialEq for TracebackCell {
     fn eq(&self, other: &TracebackCell) -> bool {
-        self.score == other.score
+        self.dp_score == other.dp_score
     }
 }
 
@@ -78,12 +77,14 @@ impl Traceback {
         let mut matrix: Vec<(Vec<TracebackCell>, usize, usize)> = vec![(vec![], 0, n); m + 1];
         for j in 0..=n {
             matrix[0].0.push(TracebackCell {
-                score: (j as i32) * gap_open,
+                dp_score: (j as i32) * gap_open,
+                temp_match: 0,
                 op: AlignmentOperation::Ins(None),
             });
         }
         matrix[0].0[0] = TracebackCell {
-            score: 0,
+            dp_score: 0,
+            temp_match: 0,
             op: AlignmentOperation::Match(None),
         };
         Traceback {
@@ -99,19 +100,22 @@ impl Traceback {
         self.matrix[row].2 = end;
         if start == 0 {
             self.matrix[row].0.push(TracebackCell {
-                score: (row as i32) * gap_open,
+                dp_score: (row as i32) * gap_open,
+                temp_match: 0,
                 op: AlignmentOperation::Del(None),
             });
         }
         else {
             self.matrix[row].0.push(TracebackCell {
-                score: MIN_SCORE,
+                dp_score: MIN_SCORE,
+                temp_match: 0,
                 op: AlignmentOperation::Match(None),
             });
         }
         for _ in 1..=size {
             self.matrix[row].0.push(TracebackCell {
-                score: MIN_SCORE,
+                dp_score: MIN_SCORE,
+                temp_match: 0,
                 op: AlignmentOperation::Match(None),
             });
         }
@@ -142,26 +146,29 @@ impl Traceback {
         // behind the band, met the edge
         else if j == 0 {
             return &TracebackCell {
-                score: MIN_SCORE,
+                dp_score: MIN_SCORE,
+                temp_match: 0,
                 op: AlignmentOperation::Del(None),
             };
         }
         // infront of the band
         else if j >= self.matrix[i].2 {
             return &TracebackCell {
-                score: MIN_SCORE,
+                dp_score: MIN_SCORE,
+                temp_match: 0,
                 op: AlignmentOperation::Ins(None),
             };
         }
         // behind the band
         else {
             return &TracebackCell {
-                score: MIN_SCORE,
+                dp_score: MIN_SCORE,
+                temp_match: 0,
                 op: AlignmentOperation::Match(None),
             };
         }
     }
-    
+
     pub fn alignment(&self) -> Alignment {
         // optimal AlignmentOperation path
         let mut ops: Vec<AlignmentOperation> = vec![];
@@ -193,10 +200,10 @@ impl Traceback {
                     //println!("INSSOM");
                 }
                 AlignmentOperation::Match(None) => {
-                    i -= 1; // break;
+                    i = 0;
                     j -= 1;
                     test_vector[3] += 1;
-                    //println!("MATCHNON");
+                    //println!("MATNON");
                 }
                 AlignmentOperation::Del(None) => {
                     i -= 1; // j -= 1;
@@ -213,7 +220,7 @@ impl Traceback {
         //println!("MS DS IS MN DN IN {:?}", test_vector);
         ops.reverse();
         Alignment {
-            score: self.get(self.last.index() + 1, self.cols).score,
+            score: self.get(self.last.index() + 1, self.cols).dp_score,
             operations: ops,
         }
     }
@@ -295,7 +302,6 @@ impl Poa {
         let mut traceback = Traceback::with_capacity(m, n, self.gap_open_score);
         // construct the score matrix (O(n^2) space)
         let mut topo = Topo::new(&self.graph);
-        let mut topo_index = 0;
         // the band required nodes
         while let Some(node) = topo.next(&self.graph) {
             let start = 0;
@@ -308,15 +314,8 @@ impl Poa {
             traceback.last = node;
             // iterate over the predecessors of this node
             let prevs: Vec<NodeIndex<usize>> = self.graph.neighbors_directed(node, Incoming).collect();
-            let mut score_position: Vec<(i32, usize)> = vec![];
-            let mut max_score = MIN_SCORE;
             for (j_p, q) in query.iter().enumerate().skip(start) {
                 let j = j_p + 1;
-                if topo_index != 0 {
-                    if j_p > end {
-                        break;
-                    }
-                }
                 // match and deletion scores for the first reference base
                 let max_cell = if prevs.is_empty() {
                     let temp_score;
@@ -327,12 +326,14 @@ impl Poa {
                         temp_score = self.mismatch_score;
                     }
                     TracebackCell {
-                        score: traceback.get(0, j - 1).score + temp_score,
+                        dp_score: traceback.get(0, j - 1).dp_score + temp_score,
+                        temp_match: 0,
                         op: AlignmentOperation::Match(None),
                     }
                 } else {
                     let mut max_cell = TracebackCell {
-                        score: MIN_SCORE,
+                        dp_score: MIN_SCORE,
+                        temp_match: 0,
                         op: AlignmentOperation::Match(None),
                     };
                     for prev_node in &prevs {
@@ -348,12 +349,14 @@ impl Poa {
                             max_cell,
                             max(
                                 TracebackCell {
-                                    score: traceback.get(i_p, j - 1).score
+                                    dp_score: traceback.get(i_p, j - 1).dp_score
                                         + temp_score,
+                                    temp_match: 0,
                                     op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
                                 },
                                 TracebackCell {
-                                    score: traceback.get(i_p, j).score + self.gap_open_score,
+                                    dp_score: traceback.get(i_p, j).dp_score + self.gap_open_score,
+                                    temp_match: 0,
                                     op: AlignmentOperation::Del(Some((i_p - 1, i))),
                                 },
                             ),
@@ -365,17 +368,13 @@ impl Poa {
                 let score = max(
                     max_cell,
                     TracebackCell {
-                        score: traceback.get(i, j - 1).score + self.gap_open_score,
+                        dp_score: traceback.get(i, j - 1).dp_score + self.gap_open_score,
+                        temp_match: 0,
                         op: AlignmentOperation::Ins(Some(i - 1)),
                     },
                 );
-                if score.score > max_score {
-                    max_score = score.score;
-                    score_position.push((score.score, j_p));
-                }
                 traceback.set(i, j, score);
             }
-            topo_index += 1;
         }
         traceback
     }
@@ -394,9 +393,13 @@ impl Poa {
         for op in aln.operations.iter() {
             match op {
                 AlignmentOperation::Match(None) => {
-                    let node: NodeIndex<usize> = NodeIndex::new(0);
+                    let node: NodeIndex<usize> = NodeIndex::new(head.index());
                     if (seq[i] != self.graph.raw_nodes()[head.index()].weight) && (seq[i] != b'X') {
                         let node = self.graph.add_node(seq[i]);
+                        if edge_not_connected {
+                            self.graph.add_edge(prev, node, 1);
+                        }
+                        edge_not_connected = false;
                         prev = node;
                     }
                     if edge_not_connected {
@@ -419,7 +422,7 @@ impl Poa {
                                 *self.graph.edge_weight_mut(edge).unwrap() += 1;
                             }
                             None => {
-                                if prev.index() != head.index() {
+                                if prev.index() != head.index() && prev.index() != node.index() {
                                     self.graph.add_edge(prev, node, 1);
                                 }
                             }
@@ -431,7 +434,7 @@ impl Poa {
                 AlignmentOperation::Ins(None) => {
                     let node = self.graph.add_node(seq[i]);
                     if edge_not_connected {
-                        self.graph.add_edge(prev, node, 1);    
+                        self.graph.add_edge(prev, node, 1);
                     }
                     prev = node;
                     edge_not_connected = true;
@@ -443,7 +446,7 @@ impl Poa {
                     prev = node;
                     i += 1;
                 }
-                AlignmentOperation::Del(_) => {} // we should only have to skip over deleted nodes
+                AlignmentOperation::Del(_) => {} // we should only have to skip over deleted nodes and xclip
             }
         }
     }
