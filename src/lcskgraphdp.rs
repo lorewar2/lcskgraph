@@ -339,11 +339,18 @@ impl Poa {
                     for prev_node in &prevs {
                         let i_p: usize = prev_node.index() + 1; // index of previous node
                         let temp_score;
+                        let matched;
+                        let mut temp_temp_match_score = 0;
                         if r == *q {
                             temp_score = self.match_score;
+                            matched = true;
                         }
                         else {
                             temp_score = self.mismatch_score;
+                            matched = false;
+                        }
+                        if matched {
+                            temp_temp_match_score = traceback.get(i_p, j - 1).dp_score + 1;
                         }
                         max_cell = max(
                             max_cell,
@@ -351,7 +358,7 @@ impl Poa {
                                 TracebackCell {
                                     dp_score: traceback.get(i_p, j - 1).dp_score
                                         + temp_score,
-                                    temp_match: 0,
+                                    temp_match: temp_temp_match_score,
                                     op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
                                 },
                                 TracebackCell {
