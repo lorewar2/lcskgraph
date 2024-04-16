@@ -1,30 +1,60 @@
 use crate::bit_tree::MaxBitTree;
 use fxhash::FxHasher;
-use std::cmp::{max, min};
+use std::cmp::{max};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use petgraph::visit::{Dfs, Visitable, Walker};
-use petgraph::graph::{DiGraph, Node, NodeIndex};
-use petgraph::{Directed, Graph, Incoming};
+use petgraph::graph::{NodeIndex};
+use petgraph::{Directed, Graph};
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn simple_dfs(test: &POAGraph) {
-    // just use dfs function in petgraph
-    let head = NodeIndex::new(0);
-    let dfs = Dfs::new(&test, head);
-    for node in dfs.iter(&test) {
-        println!("Visited: {:?}", test[node]);
+pub fn find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> Vec<(u32, u32, Vec<usize>)> {
+    // hash the query
+    let set = hash_kmers(query, k);
+    // go through the paths and get the indices of path and make a list with query index, graph index, paths
+    let mut result_vec: Vec<(u32, u32, Vec<usize>)> = vec![];
+    for (index, seq) in graph_sequences.iter().enumerate() {
+        let matches = find_kmer_matches_seq1_hashed(&set, seq, k);
+        // go through the matches and see if they are in the already made list
+        for a_match in matches {
+            // first get the graph index for the match
+            let graph_index = graph_ids[index][a_match.1 as usize] as u32;
+            // if it is in the result vec, add path if indices match and path different
+            if let Some(index_result) = result_vec.iter().position(|r| (r.0, r.1) == (a_match.0, graph_index)) {
+                result_vec[index_result].2.push(index);
+            }
+            // not in the result vec just add
+            else {
+                result_vec.push((a_match.0, graph_index, vec![index]));
+            }
+        }
     }
+    result_vec
 }
 
-pub fn dfs_with_max_link_cuts() {
-
-}
-
-pub fn dfs_with_bfs_check_cuts() {
-
+pub fn simple_dfs_all_paths (
+    graph: &POAGraph, 
+    start: usize,
+    current_path: Vec<usize>,
+    current_sequence: Vec<u8>,
+    all_paths: &mut Vec<Vec<usize>>,
+    all_sequences: &mut Vec<Vec<u8>>
+) {
+    let mut path = current_path.clone();
+    let mut sequence = current_sequence.clone();
+    path.push(start);
+    sequence.push(graph.raw_nodes()[start].weight);
+    // if no neighbours, last node reached
+    if graph.neighbors(NodeIndex::new(start)).count() == 0 {
+        all_paths.push(path.clone());
+        all_sequences.push(sequence.clone());
+    } else {
+        // go through neighbours recursively
+        for neighbor in graph.neighbors(NodeIndex::new(start)) {
+            simple_dfs_all_paths(graph, neighbor.index(), path.clone(), sequence.clone(), all_paths, all_sequences);
+        }
+    }
 }
 
 pub fn lcskpp(matches: &[(u32, u32)], k: usize) {
@@ -96,16 +126,6 @@ pub fn lcskpp(matches: &[(u32, u32)], k: usize) {
     //dp_vector: dp,
 }
 
-pub fn find_kmer_matches(seq1: &[u8], seq2: &[u8], k: usize) -> Vec<(u32, u32)> {
-    if seq1.len() < seq2.len() {
-        let set = hash_kmers(seq1, k);
-        find_kmer_matches_seq1_hashed(&set, seq2, k)
-    } else {
-        let set = hash_kmers(seq2, k);
-        find_kmer_matches_seq2_hashed(seq1, &set, k)
-    }
-}
-
 pub fn hash_kmers(seq: &[u8], k: usize) -> HashMapFx<&[u8], Vec<u32>> {
     let slc = seq;
     let mut set: HashMapFx<&[u8], Vec<u32>> = HashMapFx::default();
@@ -132,28 +152,6 @@ pub fn find_kmer_matches_seq1_hashed(
             }
         }
     }
-
-    matches.sort_unstable();
-    matches
-}
-
-pub fn find_kmer_matches_seq2_hashed(
-    seq1: &[u8],
-    seq2_set: &HashMapFx<&[u8], Vec<u32>>,
-    k: usize,
-) -> Vec<(u32, u32)> {
-    let mut matches = Vec::new();
-
-    for i in 0..(seq1.len() + 1).saturating_sub(k) {
-        let slc = &seq1[i..i + k];
-
-        if let Some(matches1) = seq2_set.get(slc) {
-            for pos1 in matches1 {
-                matches.push((i as u32, *pos1));
-            }
-        }
-    }
-
     matches.sort_unstable();
     matches
 }
