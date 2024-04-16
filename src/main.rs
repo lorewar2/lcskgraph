@@ -1,4 +1,6 @@
 mod lcskgraphdp;
+mod lcskgraphefficient;
+mod bittree;
 use lcskgraphdp::*;
 use petgraph::dot::Dot;
 fn main() {
