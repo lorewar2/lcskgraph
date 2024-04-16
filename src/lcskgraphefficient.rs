@@ -1,12 +1,22 @@
-use crate::bittree::MaxBitTree;
+use crate::bit_tree::MaxBitTree;
 use fxhash::FxHasher;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use petgraph::visit::{Dfs, Visitable, Walker};
+use petgraph::graph::{DiGraph, Node, NodeIndex};
+use petgraph::{Directed, Graph, Incoming};
+
+pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn simple_dfs() {
-    // first do this one and check the time complexty and accuracy and stuff
+pub fn simple_dfs(test: &POAGraph) {
+    // just use dfs function in petgraph
+    let head = NodeIndex::new(0);
+    let dfs = Dfs::new(&test, head);
+    for node in dfs.iter(&test) {
+        println!("Visited: {:?}", test[node]);
+    }
 }
 
 pub fn dfs_with_max_link_cuts() {
