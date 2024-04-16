@@ -17,11 +17,10 @@ pub fn lcskpp_graph(matches_with_path_indices: Vec<(u32, u32, Vec<usize>)>, path
 
     let k = k as u32;
 
-    let mut events: Vec<(u32, u32, u32, u32)> = Vec::new();
-    let mut n = 0;
+    let mut events: Vec<(u32, u32, u32, u32, Vec<usize>)> = Vec::new();
+    let mut max_ns = vec![0; paths.len()];
 
     for (idx, &(x, y, ref z)) in matches_with_path_indices.iter().enumerate() {
-        
         // in path find y and add k to the index and that is the value, get one path just use the first one
         let mut y_plusk_index = 0;
         
@@ -32,17 +31,26 @@ pub fn lcskpp_graph(matches_with_path_indices: Vec<(u32, u32, Vec<usize>)>, path
             print!("SERIOUS ERROR Y IN PATH NOT FOUND");
         }
         // add the previous one as well
-        events.push((x, y, y_plusk_index, (idx + matches_with_path_indices.len()) as u32));
-        events.push((x + k, y_plusk_index, y, idx as u32));
-        n = max(n, x + k);
-        n = max(n, y_plusk_index);
+        events.push((x, y, y_plusk_index, (idx + matches_with_path_indices.len()) as u32, z.clone()));
+        events.push((x + k, y, y_plusk_index, idx as u32, z.clone()));
+        for path in z {
+            max_ns[*path] = max(max_ns[*path], x + k);
+            max_ns[*path] = max(max_ns[*path], y_plusk_index);
+        }
     }
     events.sort_unstable();
     for event in &events {
-        println!("{} {} {}", event.0, event.1, event.2);
+        println!("{} {} {} {} {:?}", event.0, event.1, event.2, event.3, event.4);
     }
+    let mut max_bit_tree_path = vec![];
+    for (index, n) in max_ns.iter().enumerate() {
+        let max_col_dp: MaxBitTree<(u32, u32)> = MaxBitTree::new(*n as usize);
+        max_bit_tree_path.push(max_col_dp);
+    }
+    /* 
     // okay until here
     // need maxbit tree for each path, and retrieve the max if only in path
+    // create max bit trees of required size
     let mut max_col_dp: MaxBitTree<(u32, u32)> = MaxBitTree::new(n as usize);
     let mut dp: Vec<(u32, i32)> = Vec::with_capacity(events.len());
     let mut best_dp = (k, 0);
@@ -93,6 +101,7 @@ pub fn lcskpp_graph(matches_with_path_indices: Vec<(u32, u32, Vec<usize>)>, path
     //path :traceback;
     //score: best_score,
     //dp_vector: dp,
+    */
 }
 
 pub fn find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> Vec<(u32, u32, Vec<usize>)> {
