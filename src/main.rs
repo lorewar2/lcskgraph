@@ -3,9 +3,7 @@ mod lcskgraphefficient;
 mod bit_tree;
 use lcskgraphdp::*;
 use petgraph::dot::Dot;
-use petgraph::graph::{NodeIndex};
-
-use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches};
+use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph};
 fn main() {
     // test run the lcsk++ incomplete code
     let x = b"AAAAAAA".to_vec();
@@ -28,7 +26,9 @@ fn main() {
     }
     let query = [65, 65, 65, 65];
     let result = find_kmer_matches(&query, &all_sequences, &all_paths, 3);
-    for re in result {
+    for re in &result {
         println!("{} {} {:?}", re.0, re.1, re.2);
     }
+
+    lcskpp_graph(result, &all_paths, 2);
 }
