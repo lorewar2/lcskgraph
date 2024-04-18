@@ -54,14 +54,15 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
 
     dp.resize(events.len(), (0, 0));
     for ev in events {
+        println!("{} {} {} {} {:?}", ev.0, ev.1, ev.2, ev.3, ev.4);
         // p is the match index
         let p = (ev.2 % kmer_pos_vec.len() as u32) as usize;
         // the the graph indices in this case is j
         let j = ev.1;
         // is start if higher than this
         let is_start = ev.2 >= (kmer_pos_vec.len() as u32);
-
         if is_start {
+            println!("IS START");
             dp[p] = (k, -1);
             // go through the paths available in this event, and get the max corrosponding value and pos
             for path in ev.4 {
@@ -72,8 +73,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                 }
             } // done until here
         } else {
+            println!("IS END");
             // See if this kmer continues a different kmer
-            // this has to be checked by path if enough nodes are available from end ev.1
+            // maybe we dont need this
             if ev.0 > k && ev.1 > k {
                 // check the diagonally prev slot for a kmer
                 // need the events path and find the k - 1 from path to find p start of continueing so event need the path index as well
@@ -90,17 +92,16 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             }
         }
     }
-
-    let mut traceback = Vec::new();
-    let (best_score, mut prev_match) = best_dp;
-    while prev_match >= 0 {
-        traceback.push(prev_match as usize);
-        prev_match = dp[prev_match as usize].1;
-    }
-    traceback.reverse();
+    //let mut traceback = Vec::new();
+    //let (best_score, mut prev_match) = best_dp;
+    //while prev_match >= 0 {
+    //    traceback.push(prev_match as usize);
+    //    prev_match = dp[prev_match as usize].1;
+    //}
+    //traceback.reverse();
     //path :traceback;
     //score: best_score,
-    //dp_vector: dp, */
+    //dp_vector: dp, 
 }
 
 pub fn convert_topological_indices_to_ascending_indices (topo_indices: &Vec<usize>, paths: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
