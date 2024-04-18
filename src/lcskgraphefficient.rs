@@ -1,9 +1,9 @@
 use crate::bit_tree::MaxBitTree;
 use fxhash::FxHasher;
-use std::cmp::{max};
+use std::cmp::max;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use petgraph::graph::{self, NodeIndex};
+use petgraph::graph::NodeIndex;
 use petgraph::{Directed, Graph};
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
@@ -45,7 +45,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     }
     let mut max_bit_tree_path = vec![];
     // generate empty fenwick trees
-    for (index, n) in max_ns.iter().enumerate() {
+    for (_index, n) in max_ns.iter().enumerate() {
         let max_col_dp: MaxBitTree<(u32, u32)> = MaxBitTree::new(*n as usize);
         max_bit_tree_path.push(max_col_dp);
     }
