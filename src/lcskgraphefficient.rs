@@ -17,22 +17,26 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
 
     let k = k as u32;
 
-    let mut events: Vec<(u32, u32, u32, u32, Vec<usize>)> = Vec::new();
+    let mut events: Vec<(u32, u32, u32, u32, u32, Vec<usize>)> = Vec::new();
     let mut max_ns = vec![0; paths.len()];
     // generate the required events
     for (idx, &(x, y)) in kmer_pos_vec.iter().enumerate() {
         // in path find y and add k to the index and that is the value, get one path just use the first one
         let mut y_plusk_index = 0;
-        
+        let mut y_plusk_minus1_index = 0;
+        // got y + k - 1, get the required values y - k - 1 and y - 1 convert this to binary search later
         if let Some(index_path) = paths[kmer_path_vec[idx][0]].iter().position(|r| r == &(y as usize)) {
-            y_plusk_index = paths[kmer_path_vec[idx][0]][index_path -1 + k as usize] as u32;
+            y_plusk_index = paths[kmer_path_vec[idx][0]][index_path - 1 + k as usize] as u32;
+            // this has to be done for every path
+            y_plusk_minus1_index = paths[kmer_path_vec[idx][0]][index_path - 2 + k as usize] as u32;
         }
         else {
             print!("SERIOUS ERROR Y IN PATH NOT FOUND");
         }
         // add the previous one as well
-        events.push((x, y, y_plusk_index, (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone()));
-        events.push((x + k - 1, y, y_plusk_index, idx as u32, kmer_path_vec[idx].clone()));
+        // IF END SAVE y - K - 1 NODE IF START SAVE y - 1 NODE (-1 if not available)
+        events.push((x, y, y_plusk_index, y_plusk_minus1_index, (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone()));
+        events.push((x + k - 1, y, y_plusk_index, y_plusk_minus1_index, idx as u32, kmer_path_vec[idx].clone()));
         for path in kmer_path_vec[idx].clone() {
             max_ns[path] = max(max_ns[path], x + k - 1);
             max_ns[path] = max(max_ns[path], y_plusk_index);
@@ -50,32 +54,34 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         max_bit_tree_path.push(max_col_dp);
     }
     let mut dp: Vec<(u32, i32)> = Vec::with_capacity(events.len());
-    let mut best_dp = (k, 0);
+    let mut best_dp = (k, 0, 0); // score, coloumn, path
 
     dp.resize(events.len(), (0, 0));
     for ev in events {
-        println!("{} {} {} {} {:?}", ev.0, ev.1, ev.2, ev.3, ev.4);
         // p is the match index
-        let p = (ev.2 % kmer_pos_vec.len() as u32) as usize;
-        // the the graph indices in this case is j
-        let j = ev.1 - 1;
+        let p = (ev.4 % kmer_pos_vec.len() as u32) as usize;
+        println!("x:{} y_start:{} y_end:{} k-1:{} idx:{} p:{}  paths:{:?}", ev.0, ev.1, ev.2, ev.3, p, ev.4, ev.5);
         // is start if higher than this
-        let is_start = ev.2 >= (kmer_pos_vec.len() as u32);
+        let is_start = ev.4 >= (kmer_pos_vec.len() as u32);
         if is_start {
-            println!("IS START");
+            print!("IS START \n");
             dp[p] = (k, -1);
             // go through the paths available in this event, and get the max corrosponding value and pos
-            for path in ev.4 {
-                let (temp_value, temp_position) = max_bit_tree_path[path].get(j as usize);
-                if (temp_value > dp[p].0) && (temp_value > 0) {
-                    dp[p] = (k + temp_value, temp_position as i32);
-                    best_dp = max(best_dp, (dp[p].0, p as i32));
+            for path in ev.5 {
+                // NEED TO MODIFY THIS TO TAKE THE PREVIOUS NODE IN PATH // do binary search to save time later
+                if let Some(index_path) = paths[path].iter().position(|r| r == &(ev.1 as usize)) {
+                    let j = paths[path][index_path - 1] as u32;
+                    let (temp_value, temp_position) = max_bit_tree_path[path].get(j as usize);
+                    if (temp_value + k > dp[p].0) && (temp_value > 0) {
+                        dp[p] = (k + temp_value, temp_position as i32);
+                        best_dp = max(best_dp, (dp[p].0, p as i32, path));
+                    }
                 }
+                
             } // done until here
         } else {
-            println!("IS END");
+            print!("IS END \n");
             // See if this kmer continues a different kmer
-            // maybe we dont need this
             if ev.0 > k && ev.1 > k {
                 // check the diagonally prev slot for a kmer
                 // need the events path and find the k - 1 from path to find p start of continueing so event need the path index as well
@@ -83,11 +89,11 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                     let prev_score = dp[cont_idx].0;
                     let candidate = (prev_score + 1, cont_idx as i32);
                     dp[p] = max(dp[p], candidate);
-                    best_dp = max(best_dp, (dp[p].0, p as i32));
+                    best_dp = max(best_dp, (dp[p].0, p as i32, 0));
                 }
             }
-            // add this end max col dp find which path fenwick tree and set it
-            for path in ev.4 {
+            // set all trees which have this match as this 
+            for path in ev.5 {
                 max_bit_tree_path[path].set(ev.1 as usize, (dp[p].0, p as u32));
             }
         }
