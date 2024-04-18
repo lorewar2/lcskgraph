@@ -25,16 +25,16 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         let mut y_plusk_index = 0;
         
         if let Some(index_path) = paths[kmer_path_vec[idx][0]].iter().position(|r| r == &(y as usize)) {
-            y_plusk_index = paths[kmer_path_vec[idx][0]][index_path + k as usize] as u32;
+            y_plusk_index = paths[kmer_path_vec[idx][0]][index_path -1 + k as usize] as u32;
         }
         else {
             print!("SERIOUS ERROR Y IN PATH NOT FOUND");
         }
         // add the previous one as well
         events.push((x, y, y_plusk_index, (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone()));
-        events.push((x + k, y, y_plusk_index, idx as u32, kmer_path_vec[idx].clone()));
+        events.push((x + k - 1, y, y_plusk_index, idx as u32, kmer_path_vec[idx].clone()));
         for path in kmer_path_vec[idx].clone() {
-            max_ns[path] = max(max_ns[path], x + k);
+            max_ns[path] = max(max_ns[path], x + k - 1);
             max_ns[path] = max(max_ns[path], y_plusk_index);
         }
     }
@@ -58,7 +58,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         // p is the match index
         let p = (ev.2 % kmer_pos_vec.len() as u32) as usize;
         // the the graph indices in this case is j
-        let j = ev.1;
+        let j = ev.1 - 1;
         // is start if higher than this
         let is_start = ev.2 >= (kmer_pos_vec.len() as u32);
         if is_start {
@@ -104,8 +104,18 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     //dp_vector: dp, 
 }
 
-pub fn convert_topological_indices_to_ascending_indices (topo_indices: &Vec<usize>, paths: &Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+pub fn convert_topological_indices_to_ascending_indices (topo_indices: &Vec<usize>, paths: &Vec<Vec<usize>>, matches: &Vec<(u32, u32)>) -> (Vec<Vec<usize>>, Vec<(u32, u32)>) {
     let mut converted_paths: Vec<Vec<usize>> = vec![];
+    let mut converted_matches: Vec<(u32, u32)> = vec![];
+    for a_match in matches {
+        let mut ascending_index = 0;
+        for topo_index in topo_indices {
+            if *topo_index == a_match.1 as usize {
+                converted_matches.push((a_match.0, ascending_index));
+            }
+            ascending_index += 1;
+        }
+    }
     for path in paths {
         let mut temp_converted_path = vec![];
         let mut path_index = 0;
@@ -120,7 +130,7 @@ pub fn convert_topological_indices_to_ascending_indices (topo_indices: &Vec<usiz
         }
         converted_paths.push(temp_converted_path);
     }
-    converted_paths
+    (converted_paths, converted_matches)
 }
 
 pub fn find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<Vec<usize>>) {

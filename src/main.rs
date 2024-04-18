@@ -33,7 +33,8 @@ fn main() {
     while let Some(node) = topo.next(&output_graph) {
         topo_indices.push(node.index());
     }
-    let converted_paths = convert_topological_indices_to_ascending_indices(&topo_indices, &all_paths);
+    let (converted_paths , converted_matches) = convert_topological_indices_to_ascending_indices(&topo_indices, &all_paths, &kmer_pos_vec);
+    
     println!("{:?}", topo_indices);
     println!("{:?}", converted_paths);
     for path_index in 0..all_paths.len() {
@@ -42,5 +43,6 @@ fn main() {
         }
         println!();
     }
-    lcskpp_graph(kmer_pos_vec, kmer_path_vec, &converted_paths, 3);
+    println!("{:?}", converted_matches);
+    lcskpp_graph(converted_matches, kmer_path_vec, &converted_paths, 3);
 }
