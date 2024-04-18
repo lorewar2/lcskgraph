@@ -60,7 +60,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     for ev in events {
         // p is the match index
         let p = (ev.4 % kmer_pos_vec.len() as u32) as usize;
-        println!("x:{} y_start:{} y_end:{} k-1:{} idx:{} p:{}  paths:{:?}", ev.0, ev.1, ev.2, ev.3, p, ev.4, ev.5);
+        println!("x:{} y_start:{} y_end:{} k-1:{}  p:{} idx:{} paths:{:?}", ev.0, ev.1, ev.2, ev.3, p, ev.4, ev.5);
         // is start if higher than this
         let is_start = ev.4 >= (kmer_pos_vec.len() as u32);
         if is_start {
@@ -71,7 +71,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                 // NEED TO MODIFY THIS TO TAKE THE PREVIOUS NODE IN PATH // do binary search to save time later
                 if let Some(index_path) = paths[path].iter().position(|r| r == &(ev.1 as usize)) {
                     let j = paths[path][index_path - 1] as u32;
+                    println!("j value = {}", j);
                     let (temp_value, temp_position) = max_bit_tree_path[path].get(j as usize);
+                    println!("temp value from fenwick tree {}", temp_value);
                     if (temp_value + k > dp[p].0) && (temp_value > 0) {
                         dp[p] = (k + temp_value, temp_position as i32);
                         best_dp = max(best_dp, (dp[p].0, p as i32, path));
@@ -85,16 +87,17 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             if ev.0 > k && ev.1 > k {
                 // check the diagonally prev slot for a kmer
                 // need the events path and find the k - 1 from path to find p start of continueing so event need the path index as well
-                if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k - 1, ev.1 - k - 1)) {
+                if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k - 1, ev.1 - 1)) {
                     let prev_score = dp[cont_idx].0;
                     let candidate = (prev_score + 1, cont_idx as i32);
                     dp[p] = max(dp[p], candidate);
                     best_dp = max(best_dp, (dp[p].0, p as i32, 0));
+                    println!("cont value from candidate {}", candidate.0);
                 }
             }
             // set all trees which have this match as this 
             for path in ev.5 {
-                max_bit_tree_path[path].set(ev.1 as usize, (dp[p].0, p as u32));
+                max_bit_tree_path[path].set(ev.2 as usize, (dp[p].0, p as u32));
             }
         }
     }
