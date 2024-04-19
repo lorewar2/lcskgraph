@@ -1,10 +1,12 @@
 mod poa;
 mod lcskgraphefficient;
 mod bit_tree;
+use std::collections::HashMap;
+
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
-use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph, convert_topological_indices_to_ascending_indices};
+use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph};
 
 fn main() {
     // test run the lcsk++ incomplete code
@@ -15,28 +17,19 @@ fn main() {
     println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     let mut all_paths: Vec<Vec<usize>> = vec![];
     let mut all_sequences: Vec<Vec<u8>> = vec![];
-    simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences);
-    let (kmer_pos_vec, kmer_path_vec) = find_kmer_matches(&y, &all_sequences, &all_paths, 2);
-    for re in &kmer_pos_vec {
-        println!("{} {}", re.0, re.1);
-    }
+
     // get topology ordering
     let mut topo = Topo::new(&output_graph);
-    // go through the nodes topologically
+    // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
     let mut topo_indices = vec![];
+    let mut topo_map = HashMap::new();
+    let mut incrementing_index: usize = 0;
     while let Some(node) = topo.next(&output_graph) {
         topo_indices.push(node.index());
+        topo_map.insert(node.index(), incrementing_index);
+        incrementing_index += 1;
     }
-    let (converted_paths , converted_matches) = convert_topological_indices_to_ascending_indices(&topo_indices, &all_paths, &kmer_pos_vec);
-    
-    println!("{:?}", topo_indices);
-    println!("{:?}", converted_paths);
-    for path_index in 0..all_paths.len() {
-        for node_index in 0..all_paths[path_index].len() {
-            print!("{}=={} {}, ", all_paths[path_index][node_index], converted_paths[path_index][node_index], all_sequences[path_index][node_index] as char);
-        }
-        println!();
-    }
-    println!("{:?}", converted_matches);
-    lcskpp_graph(converted_matches, kmer_path_vec, &converted_paths, 2);
+    simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+    let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, 2);
+    lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, 2);
 }
