@@ -1,12 +1,13 @@
 mod poa;
 mod lcskgraphefficient;
+mod lcskgraphdp;
 mod bit_tree;
 use std::collections::HashMap;
-
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
 use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph};
+use lcskgraphdp::Aligner as aligner2;
 
 fn main() {
     // test run the lcsk++ incomplete code
@@ -32,4 +33,7 @@ fn main() {
     simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
     let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, 2);
     lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, 2);
+    // test fulldplcsk++ 
+    let mut aligner2 = aligner2::new(2, -2, -2, &x);
+    aligner2.global(&y, 2);
 }

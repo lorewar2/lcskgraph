@@ -9,10 +9,10 @@ use petgraph::{Directed, Graph};
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, paths: &Vec<Vec<usize>>, k: usize) {
+pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, paths: &Vec<Vec<usize>>, k: usize) -> u32 {
     // return nothing if empty
     if kmer_pos_vec.is_empty() {
-        return;
+        return 0;
     }
 
     let k = k as u32;
@@ -106,6 +106,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
     //path :traceback;
     //score: best_score,
     //dp_vector: dp,
+    best_score
 }
 
 pub fn find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<u32>, Vec<Vec<usize>>, Vec<Vec<u32>>) {
