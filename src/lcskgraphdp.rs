@@ -131,42 +131,14 @@ impl Traceback {
 
     fn set(&mut self, i: usize, j: usize, cell: TracebackCell) {
         // set the matrix cell if in band range
-        if !(self.matrix[i].1 > j || self.matrix[i].2 < j) {
-            let real_position = j - self.matrix[i].1;
-            self.matrix[i].0[real_position] = cell;
-        }
+        let real_position = j - self.matrix[i].1;
+        self.matrix[i].0[real_position] = cell;
     }
 
     fn get(&self, i: usize, j: usize) -> &TracebackCell {
-        // get the matrix cell if in band range else return the appropriate values
-        if !(self.matrix[i].1 > j || self.matrix[i].2 <= j) && (self.matrix[i].0.len() > 0) {
-            let real_position = j - self.matrix[i].1;
-            return &self.matrix[i].0[real_position];
-        }
-        // behind the band, met the edge
-        else if j == 0 {
-            return &TracebackCell {
-                dp_score: 0,
-                temp_match: 0,
-                op: AlignmentOperation::Del(None),
-            };
-        }
-        // infront of the band
-        else if j >= self.matrix[i].2 {
-            return &TracebackCell {
-                dp_score: 0,
-                temp_match: 0,
-                op: AlignmentOperation::Ins(None),
-            };
-        }
-        // behind the band
-        else {
-            return &TracebackCell {
-                dp_score: 0,
-                temp_match: 0,
-                op: AlignmentOperation::Match(None),
-            };
-        }
+        let real_position = j - self.matrix[i].1;
+        return &self.matrix[i].0[real_position];
+        
     }
 
     pub fn alignment(&self) -> Alignment {
@@ -321,6 +293,7 @@ impl Poa {
                     let temp_score;
                     let dp_score;
                     if r == *q {
+                        println!("MAtch");
                         temp_score = traceback.get(0, j - 1).temp_match + 1;
                     }
                     else {
@@ -346,15 +319,41 @@ impl Poa {
                     for prev_node in &prevs {
                         let i_p: usize = prev_node.index() + 1; // index of previous node
                         let temp_score;
+                        
                         let mut dp_score;
                         if r == *q {
-                            temp_score = traceback.get(i_p, j - 1).temp_match + 1;
+                            println!("MAtch {}", traceback.get(i_p, j - 1).temp_match);
+                            if traceback.get(i_p, j - 1).temp_match == 0 {
+                                temp_score = max(traceback.get(i_p, j - 1).dp_score + 1, 1);
+                                
+                            }
+                            else {
+                                temp_score = traceback.get(i_p, j - 1).temp_match + 1;
+                            }
+                            println!("{}", temp_score);
                         }
                         else {
                             temp_score = 0;
                         }
-                        if temp_score >= k as i32 {
+                        println!("{}", temp_score);
+                        if (temp_score >= k as i32) && (temp_score > traceback.get(i, j - 1).dp_score) && (temp_score > traceback.get(i_p, j).dp_score) {
+                            println!("{} {} {}", traceback.get(i, j - 1).dp_score, traceback.get(i_p, j).dp_score, temp_score);
                             dp_score = max(temp_score, traceback.get(i_p, j).dp_score);
+                            max_cell = max(
+                                max_cell,
+                                max(
+                                    TracebackCell {
+                                        dp_score: traceback.get(i_p, j).dp_score,
+                                        temp_match: temp_score,
+                                        op: AlignmentOperation::Del(Some((i_p - 1, i))),
+                                    },
+                                    TracebackCell {
+                                        dp_score: traceback.get(i, j - 1).dp_score,
+                                        temp_match: 0,
+                                        op: AlignmentOperation::Ins(Some(i - 1)),
+                                    },
+                                ),
+                            );
                             max_cell = max(
                                 max_cell,
                                 max(
@@ -364,46 +363,41 @@ impl Poa {
                                         op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
                                     },
                                     TracebackCell {
+                                        dp_score: traceback.get(i, j - 1).dp_score,
+                                        temp_match: 0,
+                                        op: AlignmentOperation::Ins(Some(i - 1)),
+                                    },
+                                ),
+                            );
+                        }
+                        else {
+                            max_cell = max(
+                                max_cell,
+                                max(
+                                    TracebackCell {
                                         dp_score: traceback.get(i_p, j).dp_score,
                                         temp_match: temp_score,
                                         op: AlignmentOperation::Del(Some((i_p - 1, i))),
                                     },
+                                    TracebackCell {
+                                        dp_score: traceback.get(i, j - 1).dp_score,
+                                        temp_match: temp_score,
+                                        op: AlignmentOperation::Ins(Some(i - 1)),
+                                    },
                                 ),
-                            );
-                            dp_score = max(dp_score, traceback.get(i, j - 1).dp_score);
-                            max_cell = max(
-                                max_cell,
-                                TracebackCell {
-                                    dp_score: traceback.get(i, j - 1).dp_score,
-                                    temp_match: temp_score,
-                                    op: AlignmentOperation::Ins(Some(i - 1)),
-                                },
                             );
                         }
                     }
                     max_cell
                 };
-                let temp_score;
-                if r == *q {
-                    temp_score = traceback.get(0, j - 1).temp_match + 1;
-                }
-                else {
-                    temp_score = 0;
-                }
-                let score = max(
-                    max_cell,
-                    TracebackCell {
-                        dp_score: traceback.get(i, j - 1).dp_score,
-                        temp_match: temp_score,
-                        op: AlignmentOperation::Ins(Some(i - 1)),
-                    },
-                );
+                let score = max_cell;
+                println!("{} {} {} {}", i, j , score.dp_score, score.temp_match);
                 traceback.set(i, j, score);
             }
         }
         let i = traceback.last.index() + 1;
         let (_m, n) = (self.graph.node_count(), query.len());
-        println!("dp score {}", traceback.get(i, n).dp_score);
+        println!("dp score {} {} {}", i, n, traceback.get(i, n).dp_score);
         traceback
     }
     
