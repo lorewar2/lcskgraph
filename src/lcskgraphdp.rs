@@ -141,6 +141,13 @@ impl Traceback {
         
     }
 
+    pub fn get_score(&self) -> i32 {
+        let i = self.last.index() + 1;
+        let (_m, n) = (self.cols, self.cols);
+        //println!("dp score {} {} {}", i, n, self.get(i, n).dp_score);
+        self.get(i, n).dp_score
+    }
+
     pub fn alignment(&self) -> Alignment {
         // optimal AlignmentOperation path
         let mut ops: Vec<AlignmentOperation> = vec![];
@@ -202,7 +209,7 @@ impl Traceback {
 ///
 /// Uses consuming builder pattern for constructing partial order alignments with method chaining
 pub struct Aligner {
-    traceback: Traceback,
+    pub traceback: Traceback,
     query: Vec<u8>,
     pub poa: Poa,
 }
