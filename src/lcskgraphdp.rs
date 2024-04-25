@@ -30,6 +30,7 @@ pub struct Alignment {
 pub struct TracebackCell {
     dp_score: i32,
     temp_match: i32,
+    start_dp: i32,
     op: AlignmentOperation,
 }
 
@@ -79,12 +80,14 @@ impl Traceback {
             matrix[0].0.push(TracebackCell {
                 dp_score: (j as i32) * gap_open,
                 temp_match: 0,
+                start_dp: 0,
                 op: AlignmentOperation::Ins(None),
             });
         }
         matrix[0].0[0] = TracebackCell {
             dp_score: 0,
             temp_match: 0,
+            start_dp: 0,
             op: AlignmentOperation::Match(None),
         };
         Traceback {
@@ -102,6 +105,7 @@ impl Traceback {
             self.matrix[row].0.push(TracebackCell {
                 dp_score: 0,
                 temp_match: 0,
+                start_dp: 0,
                 op: AlignmentOperation::Del(None),
             });
         }
@@ -109,6 +113,7 @@ impl Traceback {
             self.matrix[row].0.push(TracebackCell {
                 dp_score: 0,
                 temp_match: 0,
+                start_dp: 0,
                 op: AlignmentOperation::Match(None),
             });
         }
@@ -116,6 +121,7 @@ impl Traceback {
             self.matrix[row].0.push(TracebackCell {
                 dp_score: 0,
                 temp_match: 0,
+                start_dp: 0,
                 op: AlignmentOperation::Match(None),
             });
         }
@@ -312,53 +318,56 @@ impl Poa {
                     else {
                         dp_score = traceback.get(0, j - 1).dp_score;
                     }
-                    println!("{}", temp_score);
                     TracebackCell {
                         dp_score: dp_score,
                         temp_match: temp_score,
+                        start_dp: 0,
                         op: AlignmentOperation::Match(None),
                     }
                 } else {
                     let mut max_cell = TracebackCell {
                         dp_score: 0,
                         temp_match: 0,
+                        start_dp: 0,
                         op: AlignmentOperation::Match(None),
                     };
                     for prev_node in &prevs {
                         let i_p: usize = prev_node.index() + 1; // index of previous node
                         let temp_score;
-                        
-                        let mut dp_score;
+                        let start_dp;
                         if r == *q {
                             //println!("MAtch {}", traceback.get(i_p, j - 1).temp_match);
                             if traceback.get(i_p, j - 1).temp_match == 0 {
-                                temp_score = max(traceback.get(i_p, j - 1).dp_score + 1, 1);
-                                
+                                //temp_score = max(traceback.get(i_p, j - 1).dp_score + 1, 1);
+                                temp_score = 1;
+                                start_dp = traceback.get(i_p, j - 1).dp_score;
                             }
                             else {
                                 temp_score = traceback.get(i_p, j - 1).temp_match + 1;
+                                start_dp = traceback.get(i_p, j - 1).start_dp;
                             }
                             //println!("{}", temp_score);
                         }
                         else {
                             temp_score = 0;
+                            start_dp = 0;
                         }
-                        println!("{}", temp_score);
                         //println!("{}", temp_score);
-                        if (temp_score >= k as i32) && (temp_score > traceback.get(i, j - 1).dp_score) && (temp_score > traceback.get(i_p, j).dp_score) {
+                        if (temp_score >= k as i32) {
                             //println!("{} {} {}", traceback.get(i, j - 1).dp_score, traceback.get(i_p, j).dp_score, temp_score);
-                            dp_score = max(temp_score, traceback.get(i_p, j).dp_score);
                             max_cell = max(
                                 max_cell,
                                 max(
                                     TracebackCell {
                                         dp_score: traceback.get(i_p, j).dp_score,
-                                        temp_match: temp_score,
+                                        temp_match: 0,
+                                        start_dp: traceback.get(i_p, j).start_dp,
                                         op: AlignmentOperation::Del(Some((i_p - 1, i))),
                                     },
                                     TracebackCell {
                                         dp_score: traceback.get(i, j - 1).dp_score,
                                         temp_match: 0,
+                                        start_dp: 0,
                                         op: AlignmentOperation::Ins(Some(i - 1)),
                                     },
                                 ),
@@ -367,13 +376,15 @@ impl Poa {
                                 max_cell,
                                 max(
                                     TracebackCell {
-                                        dp_score: temp_score,
+                                        dp_score: temp_score + start_dp,
                                         temp_match: temp_score,
+                                        start_dp: start_dp,
                                         op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
                                     },
                                     TracebackCell {
                                         dp_score: traceback.get(i, j - 1).dp_score,
                                         temp_match: 0,
+                                        start_dp: 0,
                                         op: AlignmentOperation::Ins(Some(i - 1)),
                                     },
                                 ),
@@ -386,11 +397,13 @@ impl Poa {
                                     TracebackCell {
                                         dp_score: traceback.get(i_p, j).dp_score,
                                         temp_match: temp_score,
+                                        start_dp: start_dp,
                                         op: AlignmentOperation::Del(Some((i_p - 1, i))),
                                     },
                                     TracebackCell {
                                         dp_score: traceback.get(i, j - 1).dp_score,
                                         temp_match: temp_score,
+                                        start_dp: start_dp,
                                         op: AlignmentOperation::Ins(Some(i - 1)),
                                     },
                                 ),
@@ -409,9 +422,9 @@ impl Poa {
         // print the whole matrix for debugging stuff
         for i in 0.. last_coloumn {
             for j in 0.. last_row {
-                print!("*{} {}* ", traceback.get(j, i).temp_match, traceback.get(j, i).dp_score);
+                //print!("*{} {} {}* ", traceback.get(j, i).temp_match, traceback.get(j, i).dp_score, traceback.get(j, i).start_dp);
             }
-            println!();
+            //println!();
         }
         traceback
     }

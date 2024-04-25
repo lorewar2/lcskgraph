@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 petgraph = ">=0.4, <0.7"
 fxhash = "0.2"
+rand = ">=0.7.3, < 0.9"
