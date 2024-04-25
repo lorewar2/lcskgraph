@@ -73,6 +73,23 @@ impl Traceback {
     ///
     /// * `m` - the number of nodes in the DAG
     /// * `n` - the length of the query sequence
+    fn initialize_scores(&mut self, gap_open: i32) {
+        for j in 0..=self.cols {
+            self.matrix[0].0.push(
+                TracebackCell {
+                    dp_score: (j as i32) * gap_open,
+                    temp_match: 0,
+                    start_dp: 0,
+                    op: AlignmentOperation::Ins(None),
+                });
+        }
+        self.matrix[0].0[0] = TracebackCell {
+            dp_score: 0,
+            temp_match: 0,
+            start_dp: 0,
+            op: AlignmentOperation::Match(None),
+        };
+    }
     fn with_capacity(m: usize, n: usize, gap_open: i32) -> Self {
         // each row of matrix contain start end position and vec of traceback cells
         let mut matrix: Vec<(Vec<TracebackCell>, usize, usize)> = vec![(vec![], 0, n); m + 1];
@@ -344,6 +361,13 @@ impl Poa {
                                 temp_score = 1;
                                 start_dp = traceback.get(i_p, j - 1).dp_score;
                             }
+                            else if (traceback.get(i_p, j - 1).temp_match != 0) && (traceback.get(i_p, j - 1).temp_match + traceback.get(i_p, j - 1).start_dp + k as i32 - 2 < traceback.get(i_p, j - 1).dp_score) {
+                                //println!("New start");
+                                //temp_score = traceback.get(i_p, j - 1).temp_match + 1;
+                                // make this the new start if start_dp calculation is higher than tmp_score + previous start dp
+                                temp_score = 1;
+                                start_dp = traceback.get(i_p, j - 1).dp_score;
+                            }
                             else {
                                 temp_score = traceback.get(i_p, j - 1).temp_match + 1;
                                 start_dp = traceback.get(i_p, j - 1).start_dp;
@@ -357,9 +381,29 @@ impl Poa {
                         }
                         //println!("{}", temp_score);
                         if (temp_score >= k as i32) {
+                            //println!("{} {} {} {}", i, j, temp_score, traceback.get(i_p, j - 1).dp_score);
+                            //println!("temp {}", temp_score);
                             //println!("{} {} {}", traceback.get(i, j - 1).dp_score, traceback.get(i_p, j).dp_score, temp_score);
                             max_cell = max(
                                 max_cell,
+                                max(
+                                    
+                                    TracebackCell {
+                                        dp_score: traceback.get(i, j - 1).dp_score,
+                                        temp_match: 0,
+                                        start_dp: 0,
+                                        op: AlignmentOperation::Ins(Some(i - 1)),
+                                    },
+                                    TracebackCell {
+                                        dp_score: temp_score + start_dp,
+                                        temp_match: temp_score,
+                                        start_dp: start_dp,
+                                        op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
+                                    }
+                                ),
+                            );
+                            //println!("max dp {} temp {}", max_cell.dp_score, max_cell.temp_match);
+                            max_cell = max(
                                 max(
                                     TracebackCell {
                                         dp_score: traceback.get(i_p, j).dp_score,
@@ -374,26 +418,29 @@ impl Poa {
                                         op: AlignmentOperation::Ins(Some(i - 1)),
                                     },
                                 ),
+                                max_cell,
                             );
+                            
+                        }
+                        else {
+                            //println!("{} {} ", i, j);
                             max_cell = max(
                                 max_cell,
                                 max(
                                     TracebackCell {
-                                        dp_score: temp_score + start_dp,
+                                        dp_score: traceback.get(i_p, j).dp_score,
                                         temp_match: temp_score,
                                         start_dp: start_dp,
                                         op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
                                     },
                                     TracebackCell {
                                         dp_score: traceback.get(i, j - 1).dp_score,
-                                        temp_match: 0,
-                                        start_dp: 0,
+                                        temp_match: temp_score,
+                                        start_dp: start_dp,
                                         op: AlignmentOperation::Ins(Some(i - 1)),
                                     },
                                 ),
                             );
-                        }
-                        else {
                             max_cell = max(
                                 max_cell,
                                 max(
@@ -420,7 +467,7 @@ impl Poa {
                 traceback.set(i, j, score);
             }
         }
-        println!("{}", last_node_match);
+        //println!("{}", last_node_match);
         /*if last_node_match {
             let maxcell = TracebackCell {
                 dp_score: traceback.get( traceback.last.index() + 1, query.len()).dp_score + 1,
@@ -442,7 +489,101 @@ impl Poa {
         
         traceback
     }
-    
+    pub fn custom(&mut self, query: &Vec<u8>) -> Traceback {
+        assert!(self.graph.node_count() != 0);
+        // dimensions of the traceback matrix
+        let (m, n) = (self.graph.node_count(), query.len());
+        // save score location of the max scoring node for the query for suffix clipping
+        let mut max_in_column = vec![(0, 0); n + 1];
+        let mut traceback = Traceback::with_capacity(m, n, -2);
+        traceback.initialize_scores(self.gap_open_score);
+        // construct the score matrix (O(n^2) space)
+        let mut topo = Topo::new(&self.graph);
+        while let Some(node) = topo.next(&self.graph) {
+            // reference base and index
+            let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
+            let i = node.index() + 1; // 0 index is for initialization so we start at 1
+            traceback.last = node;
+            // iterate over the predecessors of this node
+            let prevs: Vec<NodeIndex<usize>> =
+                self.graph.neighbors_directed(node, Incoming).collect();
+            traceback.new_row(
+                i,
+                n + 1,
+                self.gap_open_score,
+                0,
+                n + 1,
+            );
+            // query base and its index in the DAG (traceback matrix rows)
+            for (query_index, query_base) in query.iter().enumerate() {
+                let j = query_index + 1; // 0 index is initialized so we start at 1
+                                         // match and deletion scores for the first reference base
+                let max_cell = if prevs.is_empty() {
+                    let temp_score;
+                    if r == *query_base {
+                        temp_score = self.match_score;
+                    }
+                    else {
+                        temp_score = self.mismatch_score;
+                    }
+                    TracebackCell {
+                        dp_score: traceback.get(0, j - 1).dp_score + temp_score,
+                        start_dp: 0,
+                        temp_match: 0,
+                        op: AlignmentOperation::Match(None),
+                    }
+                } else {
+                    let mut max_cell = 
+                        TracebackCell {
+                            dp_score: MIN_SCORE,
+                            start_dp: 0,
+                            temp_match: 0,
+                            op: AlignmentOperation::Match(None)};
+                    for prev_node in &prevs {
+                        let i_p: usize = prev_node.index() + 1; // index of previous node
+                        let temp_score;
+                        if r == *query_base {
+                            temp_score = self.match_score;
+                        }
+                        else {
+                            temp_score = self.mismatch_score;
+                        }
+                        max_cell = max(
+                            max_cell,
+                            max(
+                                TracebackCell {
+                                    dp_score: traceback.get(i_p, j - 1).dp_score
+                                        + temp_score,
+                                    start_dp: 0,
+                                    temp_match: 0,
+                                    op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
+                                },
+                                TracebackCell {
+                                    dp_score: traceback.get(i_p, j).dp_score + self.gap_open_score,
+                                    start_dp: 0,
+                                    temp_match: 0,
+                                    op: AlignmentOperation::Del(Some((i_p - 1, i))),
+                                },
+                            ),
+                        );
+                    }
+                    max_cell
+                };
+                let score = max(
+                    max_cell,
+                    TracebackCell {
+                        dp_score: traceback.get(i, j - 1).dp_score + self.gap_open_score,
+                        start_dp: 0,
+                        temp_match: 0,
+                        op: AlignmentOperation::Ins(Some(i - 1)),
+                    },
+                );
+                traceback.set(i, j, score);
+            }
+        }
+
+        traceback
+    }
     /// Incorporate a new sequence into a graph from an alignment
     ///
     /// # Arguments

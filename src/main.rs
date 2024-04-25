@@ -18,12 +18,17 @@ fn main() {
     //let y = b"ATTATAAAG".to_vec();
     //let x = b"ATAGTAAAATATATG".to_vec();
     //let x = b"CTATAGAGTA".to_vec();
+    
     //let y = b"ATTATG".to_vec();
-    for seed in 0..100000 {
-        let string_vec = get_random_sequences_from_generator(10, 2, seed);
+    let seed = 9; // 9 and 105
+    for seed in 0..10000 {
+        println!("seed {}", seed);
+        let string_vec = get_random_sequences_from_generator(20, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
+        let z = string_vec[2].as_bytes().to_vec();
         let y = string_vec[1].as_bytes().to_vec();
-        let aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+        aligner.global(&z).add_to_graph();
         let output_graph = aligner.graph();
         //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
         let mut all_paths: Vec<Vec<usize>> = vec![];
@@ -41,14 +46,16 @@ fn main() {
             incrementing_index += 1;
         }
         simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, 2);
-        let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, 2);
+        println!("{}", all_paths.len());
+        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, 3);
+        let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, 3);
+        println!("{} {}", all_paths.len(), k_score);
         // test fulldplcsk++ 
-        let mut aligner2 = aligner2::new(0, 0, 0, &x);
-        aligner2.global(&y, 2);
-        let dp_score = aligner2.traceback.get_score();
-        println!("efficient_score: {} dp_score: {}", k_score, dp_score);
-        assert!(k_score == dp_score as u32);
+        //let mut aligner2 = aligner2::new(0, 0, 0, &x);
+        //aligner2.global(&y, 3);
+        //let dp_score = aligner2.traceback.get_score();
+        //println!("efficient_score: {} dp_score: {}", k_score, dp_score);
+        //assert!(k_score == dp_score as u32);
     }
 }
 
