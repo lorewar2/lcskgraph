@@ -11,8 +11,12 @@ use lcskgraphdp::Aligner as aligner2;
 
 fn main() {
     // test run the lcsk++ incomplete code
+    //let x = b"ATAGTAAAATATATG".to_vec(); // test case 1 which was fixed
+    //let y = b"ATTATG".to_vec();
+    // test case 2
+    let y = b"ATTATAAAG".to_vec();
     let x = b"ATAGTAAAATATATG".to_vec();
-    let y = b"ATTATG".to_vec();
+    
     let aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
     let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));

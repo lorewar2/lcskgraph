@@ -41,16 +41,27 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
     }
     let mut dp: Vec<(u32, i32)> = Vec::with_capacity(events.len());
     let mut best_dp = (k, 0, 0); // score, coloumn, path
-
+    // update trees only after the next query point is hit
+    let mut tree_update_required_level = 0;
+    let mut tree_update_vec: Vec<(u32, (u32, u32), u32, Vec<usize>)> = vec![(0, (0, 0), 0, vec![])]; //current x, value,  index, paths (trees)
     dp.resize(events.len(), (0, 0));
     for ev in events {
+        if tree_update_required_level != ev.0 && tree_update_vec.len() != 0 {
+            // update trees here
+            for tree_info in &tree_update_vec {
+                for path in &tree_info.3 {
+                    max_bit_tree_path[*path].set(tree_info.2 as usize, tree_info.1);
+                }
+            }
+            //tree_update_vec = vec![];
+        }
         // p is the match index
         let p = (ev.3 % kmer_pos_vec.len() as u32) as usize;
-        //println!("x:{} y_start:{} y_end:{} p:{} idx:{} paths:{:?}", ev.0, ev.1, ev.2, p, ev.3, ev.4);
+        println!("x:{} y_start:{} y_end:{} p:{} idx:{} paths:{:?}", ev.0, ev.1, ev.2, p, ev.3, ev.4);
         // is start if higher than this
         let is_start = ev.3 >= (kmer_pos_vec.len() as u32);
         if is_start {
-            //print!("IS START \n");
+            print!("IS START \n");
             dp[p] = (k, -1);
             // go through the paths available in this event, and get the max corrosponding value and pos
             for path_index in 0..ev.4.len() {
@@ -68,7 +79,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
                 }
             }
         } else {
-            //print!("IS END \n");
+            print!("IS END \n");
             // See if this kmer continues a different kmer
             if ev.0 >= k {
                 for path_index in 0..ev.4.len() {
@@ -76,6 +87,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
                     let prev_node = ev.5[path_index];
                     if prev_node != u32::MAX {
                         if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k, prev_node)) {
+                            println!("!!!!!!!!!!");
                             let prev_score = dp[cont_idx].0;
                             let candidate = (prev_score + 1, cont_idx as i32);
                             dp[p] = max(dp[p], candidate);
@@ -87,10 +99,10 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
                     }
                 }
             }
-            // set all trees which have this match as this 
-            for path in &ev.4 {
-                max_bit_tree_path[*path].set(ev.2 as usize, (dp[p].0, p as u32));
-            }
+            // set all trees which have this match as this // maybe update this in the next iteration to prevent query overlapping
+            //  update required, current x, value,  index, paths (trees)
+            tree_update_vec.push((ev.0, (dp[p].0, p as u32), ev.2, ev.4.clone()));
+            tree_update_required_level = ev.0;
         }
     }
     let mut traceback = Vec::new();
@@ -98,7 +110,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
     //println!("BEST SCORE: {} PREV_MATCH: {}", best_score, prev_match);
     //println!("PATHS");
     while prev_match >= 0 {
-        //println!("{} ", prev_match);
+        println!("{} ", prev_match);
         traceback.push(prev_match as usize);
         prev_match = dp[prev_match as usize].1;
     }

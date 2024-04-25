@@ -300,7 +300,7 @@ impl Poa {
                     let temp_score;
                     let dp_score;
                     if r == *q {
-                        println!("MAtch");
+                        //println!("MAtch");
                         temp_score = traceback.get(0, j - 1).temp_match + 1;
                     }
                     else {
@@ -312,6 +312,7 @@ impl Poa {
                     else {
                         dp_score = traceback.get(0, j - 1).dp_score;
                     }
+                    println!("{}", temp_score);
                     TracebackCell {
                         dp_score: dp_score,
                         temp_match: temp_score,
@@ -329,7 +330,7 @@ impl Poa {
                         
                         let mut dp_score;
                         if r == *q {
-                            println!("MAtch {}", traceback.get(i_p, j - 1).temp_match);
+                            //println!("MAtch {}", traceback.get(i_p, j - 1).temp_match);
                             if traceback.get(i_p, j - 1).temp_match == 0 {
                                 temp_score = max(traceback.get(i_p, j - 1).dp_score + 1, 1);
                                 
@@ -337,14 +338,15 @@ impl Poa {
                             else {
                                 temp_score = traceback.get(i_p, j - 1).temp_match + 1;
                             }
-                            println!("{}", temp_score);
+                            //println!("{}", temp_score);
                         }
                         else {
                             temp_score = 0;
                         }
                         println!("{}", temp_score);
+                        //println!("{}", temp_score);
                         if (temp_score >= k as i32) && (temp_score > traceback.get(i, j - 1).dp_score) && (temp_score > traceback.get(i_p, j).dp_score) {
-                            println!("{} {} {}", traceback.get(i, j - 1).dp_score, traceback.get(i_p, j).dp_score, temp_score);
+                            //println!("{} {} {}", traceback.get(i, j - 1).dp_score, traceback.get(i_p, j).dp_score, temp_score);
                             dp_score = max(temp_score, traceback.get(i_p, j).dp_score);
                             max_cell = max(
                                 max_cell,
@@ -398,13 +400,19 @@ impl Poa {
                     max_cell
                 };
                 let score = max_cell;
-                println!("{} {} {} {}", i, j , score.dp_score, score.temp_match);
+                //println!("{} {} {} {}", i, j , score.dp_score, score.temp_match);
                 traceback.set(i, j, score);
             }
         }
-        let i = traceback.last.index() + 1;
-        let (_m, n) = (self.graph.node_count(), query.len());
-        println!("dp score {} {} {}", i, n, traceback.get(i, n).dp_score);
+        let last_row = traceback.last.index() + 2;
+        let last_coloumn = query.len() + 1;
+        // print the whole matrix for debugging stuff
+        for i in 0.. last_coloumn {
+            for j in 0.. last_row {
+                print!("*{} {}* ", traceback.get(j, i).temp_match, traceback.get(j, i).dp_score);
+            }
+            println!();
+        }
         traceback
     }
     
