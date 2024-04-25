@@ -287,6 +287,7 @@ impl Poa {
         let mut traceback = Traceback::with_capacity(m, n, self.gap_open_score);
         // construct the score matrix (O(n^2) space)
         let mut topo = Topo::new(&self.graph);
+        let mut last_node_match = false;
         // the band required nodes
         while let Some(node) = topo.next(&self.graph) {
             let start = 0;
@@ -336,6 +337,7 @@ impl Poa {
                         let temp_score;
                         let start_dp;
                         if r == *q {
+                            last_node_match = true;
                             //println!("MAtch {}", traceback.get(i_p, j - 1).temp_match);
                             if traceback.get(i_p, j - 1).temp_match == 0 {
                                 //temp_score = max(traceback.get(i_p, j - 1).dp_score + 1, 1);
@@ -349,6 +351,7 @@ impl Poa {
                             //println!("{}", temp_score);
                         }
                         else {
+                            last_node_match = false;
                             temp_score = 0;
                             start_dp = 0;
                         }
@@ -417,15 +420,26 @@ impl Poa {
                 traceback.set(i, j, score);
             }
         }
+        println!("{}", last_node_match);
+        /*if last_node_match {
+            let maxcell = TracebackCell {
+                dp_score: traceback.get( traceback.last.index() + 1, query.len()).dp_score + 1,
+                temp_match: traceback.get( traceback.last.index() + 1, query.len()).temp_match,
+                start_dp: traceback.get( traceback.last.index() + 1, query.len()).start_dp,
+                op: AlignmentOperation::Ins(Some(1)),
+            };
+            traceback.set(traceback.last.index() + 1, query.len(), maxcell);
+        }*/
         let last_row = traceback.last.index() + 2;
         let last_coloumn = query.len() + 1;
         // print the whole matrix for debugging stuff
         for i in 0.. last_coloumn {
             for j in 0.. last_row {
-                //print!("*{} {} {}* ", traceback.get(j, i).temp_match, traceback.get(j, i).dp_score, traceback.get(j, i).start_dp);
+                print!("*{} {} {}* ", traceback.get(j, i).temp_match, traceback.get(j, i).dp_score, traceback.get(j, i).start_dp);
             }
-            //println!();
+            println!();
         }
+        
         traceback
     }
     

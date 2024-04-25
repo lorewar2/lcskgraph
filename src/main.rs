@@ -19,7 +19,7 @@ fn main() {
     //let x = b"ATAGTAAAATATATG".to_vec();
     //let x = b"CTATAGAGTA".to_vec();
     //let y = b"ATTATG".to_vec();
-    for seed in 0..100 {
+    for seed in 0..100000 {
         let string_vec = get_random_sequences_from_generator(10, 2, seed);
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec[1].as_bytes().to_vec();
@@ -48,6 +48,7 @@ fn main() {
         aligner2.global(&y, 2);
         let dp_score = aligner2.traceback.get_score();
         println!("efficient_score: {} dp_score: {}", k_score, dp_score);
+        assert!(k_score == dp_score as u32);
     }
 }
 
@@ -111,7 +112,7 @@ pub fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequen
                 _ => {}
             }
         }
-        //println!("{:?}", mutseq.iter().collect::<String>());
+        println!("{:?}", mutseq.iter().collect::<String>());
         //insert to vector
         randomvec.push(mutseq.iter().collect::<String>());
     }
