@@ -3,11 +3,102 @@ use fxhash::FxHasher;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use petgraph::Outgoing;
 use petgraph::graph::NodeIndex;
 use petgraph::{Directed, Graph};
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+
+const CUT_THRESHOLD: usize = 5;
+
+pub fn divide_and_poa_graph (output_graph: &POAGraph, topo_indices: &Vec<usize>) {
+    let mut cut_start_end: Vec<(usize, usize)>= vec![];
+    let mut current_topo_indices_index: usize = 0;
+    let mut processed_nodes: Vec<usize> = vec![];
+    let mut current_cut_limit: usize = CUT_THRESHOLD;
+    let mut current_start: usize = topo_indices[current_topo_indices_index];
+    println!("{}", current_start);
+    // add nodes to the processed nodes until we reach the cut limit
+    while topo_indices.len() > processed_nodes.len() {
+        if current_topo_indices_index + 1 < topo_indices.len() {
+            if current_topo_indices_index >= current_cut_limit {
+                println!("Try cutting");
+                let cut_result = try_to_make_the_cut(output_graph, topo_indices[current_topo_indices_index]);
+                // make a cut if successful update the current_cut_limit
+                if cut_result {
+                    // this node becomes the end node make a entry in the vec
+                    cut_start_end.push((current_start, topo_indices[current_topo_indices_index]));
+                    current_start = topo_indices[current_topo_indices_index + 1];
+                    current_cut_limit += CUT_THRESHOLD;
+                }
+                // else just add entry to the processed nodes
+                else {
+                    
+                }
+            }
+            println!("{} {}", current_topo_indices_index, current_cut_limit);
+        }
+        else {
+            break;
+        }
+        processed_nodes.push(topo_indices[current_topo_indices_index]);
+        current_topo_indices_index += 1;
+    }
+    cut_start_end.push((current_start, topo_indices[current_topo_indices_index]));
+    println!("{:?}", cut_start_end);
+    for current_start_end in cut_start_end {
+        let (start, end) = current_start_end;
+        let mut all_paths: Vec<Vec<usize>> = vec![];
+        let mut all_sequences: Vec<Vec<u8>> = vec![];
+        simple_dfs_with_start_end(output_graph, start, end, vec![], vec![], &mut all_paths, &mut all_sequences);
+        println!("{}", all_paths.len());
+    }
+}
+
+pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize) -> bool {
+    // for the selected node, see if there is only one outgoing edge
+    let mut neighbour_nodes = output_graph.neighbors_directed(NodeIndex::new(topo_index), Outgoing);
+    let mut number_of_outgoing_node = 0;
+    while let Some(_neighbour_node) = neighbour_nodes.next() {
+        number_of_outgoing_node += 1;
+        if number_of_outgoing_node >= 2 {
+            break;
+        }
+    }
+    // if cut is successful return true
+    if number_of_outgoing_node == 1 {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+pub fn simple_dfs_with_start_end (
+    graph: &POAGraph, 
+    start: usize,
+    end: usize,
+    current_path: Vec<usize>,
+    current_sequence: Vec<u8>,
+    all_paths: &mut Vec<Vec<usize>>,
+    all_sequences: &mut Vec<Vec<u8>>
+) {
+    let mut path = current_path.clone();
+    let mut sequence = current_sequence.clone();
+    path.push(start);
+    sequence.push(graph.raw_nodes()[start].weight);
+    // if no neighbours, last node reached
+    if (graph.neighbors(NodeIndex::new(start)).count() == 0) && (start == end) {
+        all_paths.push(path.clone());
+        all_sequences.push(sequence.clone());
+    } else {
+        // go through neighbours recursively
+        for neighbor in graph.neighbors(NodeIndex::new(start)) {
+            simple_dfs_with_start_end(graph, neighbor.index(), end, path.clone(), sequence.clone(), all_paths, all_sequences);
+        }
+    }
+}
 
 pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, paths: &Vec<Vec<usize>>, k: usize) -> u32 {
     // return nothing if empty
