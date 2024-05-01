@@ -10,39 +10,38 @@ use petgraph::{Directed, Graph};
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-const CUT_THRESHOLD: usize = 5;
+const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
 
-pub fn divide_and_poa_graph (output_graph: &POAGraph, topo_indices: &Vec<usize>) {
+pub fn divide_poa_graph_get_paths (output_graph: &POAGraph, topo_indices: &Vec<usize>, total_num_sequences: usize, cut_threshold: usize) {
     let mut cut_start_end: Vec<(usize, usize)>= vec![];
     let mut current_topo_indices_index: usize = 0;
-    let mut processed_nodes: Vec<usize> = vec![];
-    let mut current_cut_limit: usize = CUT_THRESHOLD;
+    let mut current_cut_limit: usize = cut_threshold;
     let mut current_start: usize = topo_indices[current_topo_indices_index];
-    println!("{}", current_start);
     // add nodes to the processed nodes until we reach the cut limit
-    while topo_indices.len() > processed_nodes.len() {
+    while topo_indices.len() > current_topo_indices_index + 1 {
         if current_topo_indices_index + 1 < topo_indices.len() {
             if current_topo_indices_index >= current_cut_limit {
-                println!("Try cutting");
-                let cut_result = try_to_make_the_cut(output_graph, topo_indices[current_topo_indices_index]);
+                println!("Try cutting...");
+                let cut_result = try_to_make_the_cut(output_graph, topo_indices[current_topo_indices_index], total_num_sequences);
                 // make a cut if successful update the current_cut_limit
                 if cut_result {
+                    println!("Cut successful! :) at {}", topo_indices[current_topo_indices_index]);
                     // this node becomes the end node make a entry in the vec
                     cut_start_end.push((current_start, topo_indices[current_topo_indices_index]));
                     current_start = topo_indices[current_topo_indices_index + 1];
-                    current_cut_limit += CUT_THRESHOLD;
+                    current_cut_limit += cut_threshold;
                 }
                 // else just add entry to the processed nodes
                 else {
-                    
+                    println!("Cut failed! :( at {}", topo_indices[current_topo_indices_index]);
+                    current_cut_limit += 1;
                 }
             }
-            println!("{} {}", current_topo_indices_index, current_cut_limit);
+            println!("index {} node {} cut limit {}", current_topo_indices_index, topo_indices[current_topo_indices_index], current_cut_limit);
         }
         else {
             break;
         }
-        processed_nodes.push(topo_indices[current_topo_indices_index]);
         current_topo_indices_index += 1;
     }
     cut_start_end.push((current_start, topo_indices[current_topo_indices_index]));
@@ -52,22 +51,33 @@ pub fn divide_and_poa_graph (output_graph: &POAGraph, topo_indices: &Vec<usize>)
         let mut all_paths: Vec<Vec<usize>> = vec![];
         let mut all_sequences: Vec<Vec<u8>> = vec![];
         simple_dfs_with_start_end(output_graph, start, end, vec![], vec![], &mut all_paths, &mut all_sequences);
-        println!("{}", all_paths.len());
+        println!("{:?}", all_paths);
     }
 }
 
-pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize) -> bool {
+pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {
     // for the selected node, see if there is only one outgoing edge
     let mut neighbour_nodes = output_graph.neighbors_directed(NodeIndex::new(topo_index), Outgoing);
     let mut number_of_outgoing_node = 0;
-    while let Some(_neighbour_node) = neighbour_nodes.next() {
+    let mut number_of_seq_match = false;
+    while let Some(neighbour_node) = neighbour_nodes.next() {
         number_of_outgoing_node += 1;
+        if number_of_outgoing_node == 1 {
+            let mut edges = output_graph.edges_connecting(NodeIndex::new(topo_index), neighbour_node);
+            let mut weight: i32 = 0;
+            while let Some(edge) = edges.next() {
+                weight += edge.weight().clone();
+            }
+            if weight == total_num_sequences as i32 {
+                number_of_seq_match = true;
+            }
+        }
         if number_of_outgoing_node >= 2 {
             break;
         }
     }
     // if cut is successful return true
-    if number_of_outgoing_node == 1 {
+    if (number_of_outgoing_node == 1) && (number_of_seq_match) {
         return true;
     }
     else {
@@ -88,8 +98,9 @@ pub fn simple_dfs_with_start_end (
     let mut sequence = current_sequence.clone();
     path.push(start);
     sequence.push(graph.raw_nodes()[start].weight);
+    //println!("current node {}", start);
     // if no neighbours, last node reached
-    if (graph.neighbors(NodeIndex::new(start)).count() == 0) && (start == end) {
+    if (graph.neighbors(NodeIndex::new(start)).count() == 0) || (start == end) {
         all_paths.push(path.clone());
         all_sequences.push(sequence.clone());
     } else {

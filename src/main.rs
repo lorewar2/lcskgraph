@@ -6,10 +6,12 @@ use std::collections::HashMap;
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
-use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph};
+use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph, divide_poa_graph_get_paths};
 use lcskgraphdp::Aligner as aligner2;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
+const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
+const KMER: usize = 2;
 fn main() {
     // test run the lcsk++ incomplete code
     //let x = b"ATAGTAAAATATATG".to_vec(); // test case 1 which was fixed
@@ -21,7 +23,7 @@ fn main() {
     
     //let y = b"ATTATG".to_vec();
     let seed = 9; // 9 and 105
-    for seed in 0..10000 {
+    {
         println!("seed {}", seed);
         let string_vec = get_random_sequences_from_generator(20, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
@@ -30,7 +32,7 @@ fn main() {
         let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
         aligner.global(&z).add_to_graph();
         let output_graph = aligner.graph();
-        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+        println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
         let mut all_paths: Vec<Vec<usize>> = vec![];
         let mut all_sequences: Vec<Vec<u8>> = vec![];
 
@@ -45,14 +47,17 @@ fn main() {
             topo_map.insert(node.index(), incrementing_index);
             incrementing_index += 1;
         }
+        println!("Getting paths by dividing..");
+        divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD);
+        println!("Getting paths directly..");
         simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        println!("{}", all_paths.len());
-        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, 3);
-        let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, 3);
-        println!("{} {}", all_paths.len(), k_score);
+        //println!("{}", all_paths.len());
+        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        //let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, KMER);
+        //println!("{} {}", all_paths.len(), k_score);
         // test fulldplcsk++ 
         //let mut aligner2 = aligner2::new(0, 0, 0, &x);
-        //aligner2.global(&y, 3);
+        //aligner2.global(&y, KMER);
         //let dp_score = aligner2.traceback.get_score();
         //println!("efficient_score: {} dp_score: {}", k_score, dp_score);
         //assert!(k_score == dp_score as u32);
