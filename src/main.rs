@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
-use crate::lcskgraphefficient::{simple_dfs_all_paths, find_kmer_matches, lcskpp_graph, divide_poa_graph_get_paths};
+use crate::lcskgraphefficient::{divide_poa_graph_get_paths, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
 use lcskgraphdp::Aligner as aligner2;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -48,12 +48,16 @@ fn main() {
             incrementing_index += 1;
         }
         println!("Getting paths by dividing..");
-        divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD);
-        println!("Getting paths directly..");
-        simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
+        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
+        println!("{:?}", kmer_pos_vec);
+        println!("{:?}", kmers_plus_k);
+        let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
+        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        //simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
         //println!("{}", all_paths.len());
         //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
-        //let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, &all_paths, KMER);
+        //let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
         //println!("{} {}", all_paths.len(), k_score);
         // test fulldplcsk++ 
         //let mut aligner2 = aligner2::new(0, 0, 0, &x);
