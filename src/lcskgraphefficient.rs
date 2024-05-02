@@ -45,8 +45,8 @@ pub fn lcskpp_graph_for_divided (
     for event in events {
         println!("{:?}", event);
     }
-    
-    /*let mut max_bit_tree_path = vec![];
+    /* 
+    let mut max_bit_tree_path = vec![];
     // generate empty fenwick trees
     for (_index, n) in max_ns.iter().enumerate() {
         let max_col_dp: MaxBitTree<(u32, u32)> = MaxBitTree::new(*n as usize);
@@ -82,11 +82,11 @@ pub fn lcskpp_graph_for_divided (
                 let prev_node = ev.5[path_index];
                 if prev_node != u32::MAX {
                     //println!("prev node value = {}", prev_node);
-                    let (temp_value, temp_position) = max_bit_tree_path[path].get(prev_node as usize);
+                    let (temp_value, temp_position) = max_bit_tree_path[path.0].get(prev_node as usize);
                     //println!("temp value from fenwick tree {}", temp_value);
                     if (temp_value + k > dp[p].0) && (temp_value > 0) {
                         dp[p] = (k + temp_value, temp_position as i32);
-                        best_dp = max(best_dp, (dp[p].0, p as i32, path));
+                        best_dp = max(best_dp, (dp[p].0, p as i32, path.0));
                         //println!("best_dp {}", best_dp.0);
                     }
                 }
