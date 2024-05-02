@@ -15,7 +15,7 @@ pub fn lcskpp_graph_for_divided (
     kmers_plus_k: Vec<u32>,
     kmer_path_vec: Vec<Vec<(usize, usize)>>,
     kmers_previous_node_in_paths: Vec<Vec<u32>>,
-    num_paths: usize,
+    max_num_paths_per_section: usize,
     k: usize
     ) {
     // return nothing if empty
@@ -25,8 +25,8 @@ pub fn lcskpp_graph_for_divided (
 
     let k = k as u32;
 
-    let mut events: Vec<(u32, u32, u32, u32, Vec<(usize, usize)>, Vec<u32>)> = Vec::new();
-    let mut max_ns = vec![0; num_paths];
+    let mut events: Vec<(u32, u32, u32, u32, Vec<(usize, usize)>, Vec<u32>)> = Vec::new(); // x, y_start, y_end, idx, (section, section_path), prev nodes
+    let mut max_ns = vec![0; max_num_paths_per_section];
     // generate the required events
     for (idx, &(x, y, section)) in kmer_pos_vec.iter().enumerate() {
         let y_plus_k = kmers_plus_k[idx];
@@ -35,8 +35,9 @@ pub fn lcskpp_graph_for_divided (
         events.push((x, y, y_plus_k, (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone()));
         events.push((x + k - 1, y, y_plus_k, idx as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone()));
         for path in kmer_path_vec[idx].clone() {
-            max_ns[path.0] = max(max_ns[path.0], x + k - 1);
-            max_ns[path.0] = max(max_ns[path.0], y_plus_k);
+            //println!("{} {}", path.1, max_num_paths_per_section);
+            max_ns[path.1] = max(max_ns[path.1], x + k - 1);
+            max_ns[path.1] = max(max_ns[path.1], y_plus_k);
         }
     }
     // sorting is okay with topologically converted indices
@@ -141,6 +142,7 @@ pub fn find_kmer_matches_for_divided (
     ) -> (Vec<(u32, u32, usize)>, Vec<u32>, Vec<Vec<(usize, usize)>>, Vec<Vec<u32>>) {
     // hash the query
     let set = hash_kmers(query, k);
+    println!("Hashed query");
     // go through the paths and get the indices of path and make a list with query index, graph index, paths
     let mut kmers_result_vec: Vec<(u32, u32, usize)> = vec![]; //
     let mut kmers_plus_k: Vec<u32> = vec![];
@@ -221,6 +223,7 @@ pub fn divide_poa_graph_get_paths (output_graph: &POAGraph, topo_indices: &Vec<u
         let (start, end) = current_start_end;
         let mut all_paths: Vec<Vec<usize>> = vec![];
         let mut all_sequences: Vec<Vec<u8>> = vec![];
+        println!("DOING DFS start {} end {}", start, end);
         simple_dfs_with_start_end(output_graph, start, end, vec![], vec![], &mut all_paths, &mut all_sequences, topo_map);
         println!("{:?}", all_paths);
         if max_number_of_paths_per_section < all_paths.len() {
@@ -276,11 +279,13 @@ pub fn simple_dfs_with_start_end (
     let mut sequence = current_sequence.clone();
     path.push(*topo_map.get(&start).unwrap());
     sequence.push(graph.raw_nodes()[start].weight);
-    //println!("current node {}", start);
     // if no neighbours, last node reached
-    if (graph.neighbors(NodeIndex::new(start)).count() == 0) || (start == end) {
-        all_paths.push(path.clone());
-        all_sequences.push(sequence.clone());
+    if (start == end) || (graph.neighbors(NodeIndex::new(start)).count() == 0) {
+        // dont check for 
+        if start == end {
+            all_paths.push(path.clone());
+            all_sequences.push(sequence.clone());
+        }
     } else {
         // go through neighbours recursively
         for neighbor in graph.neighbors(NodeIndex::new(start)) {

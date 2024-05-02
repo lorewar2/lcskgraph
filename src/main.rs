@@ -52,7 +52,7 @@ fn main() {
         let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
         println!("{:?}", kmer_pos_vec);
         println!("{:?}", kmers_plus_k);
-        let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
+        let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, max_paths, KMER);
         //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
         //simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
         //println!("{}", all_paths.len());
