@@ -10,6 +10,43 @@ use petgraph::{Directed, Graph};
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+pub fn dfs_get_sequence_paths (
+    index: usize,
+    sequences: &Vec<String>,
+    mut temp_sequences: Vec<String>,
+    graph: &POAGraph, 
+    start: usize,
+    current_path: Vec<usize>,
+    current_sequence: Vec<u8>,
+    all_paths: &mut Vec<Vec<usize>>,
+    all_sequences: &mut Vec<Vec<u8>>,
+    topo_map: &HashMap<usize, usize>
+) {
+    // go through the temp sequences and pop the ones which do not have the current base.
+    for seq_index in temp_sequences.len() - 1..0 {
+        if temp_sequences[seq_index].as_bytes()[index] != graph.raw_nodes()[start].weight {
+            temp_sequences.remove(seq_index);
+        }
+    }
+    let mut path = current_path.clone();
+    let mut sequence = current_sequence.clone();
+    path.push(*topo_map.get(&start).unwrap());
+    sequence.push(graph.raw_nodes()[start].weight);
+    // if no neighbours, last node reached
+    if graph.neighbors(NodeIndex::new(start)).count() == 0 {
+        all_paths.push(path.clone());
+        all_sequences.push(sequence.clone());
+    } else {
+        // go through neighbours recursively
+        if temp_sequences.len() > 0 {
+            for neighbor in graph.neighbors(NodeIndex::new(start)) {
+                dfs_get_sequence_paths(index + 1, sequences, temp_sequences.clone(), graph, neighbor.index(), path.clone(), sequence.clone(), all_paths, all_sequences, topo_map);
+            }
+        }
+    }
+}
+
+// incomplete
 pub fn lcskpp_graph_for_divided (
     kmer_pos_vec: Vec<(u32, u32, usize)>,
     kmers_plus_k: Vec<u32>,
