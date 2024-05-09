@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
-use crate::lcskgraphefficient::{divide_poa_graph_get_paths, dfs_get_sequence_paths, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
+use crate::lcskgraphefficient::{divide_poa_graph_get_paths, find_sequence_in_graph, dfs_get_sequence_paths, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
 use lcskgraphdp::Aligner as aligner2;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -25,7 +25,7 @@ fn main() {
     let seed = 9; // 9 and 105
     {
         println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(10000, 3, seed);
+        let mut string_vec = get_random_sequences_from_generator(20000, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec[2].as_bytes().to_vec();
         let z = string_vec[1].as_bytes().to_vec();
@@ -48,7 +48,8 @@ fn main() {
             topo_map.insert(node.index(), incrementing_index);
             incrementing_index += 1;
         }
-        dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        find_sequence_in_graph (string_vec[1].as_bytes().to_vec().clone(), output_graph, 0, &topo_map);
         println!("{:?}", all_paths);
         println!("{:?}", all_sequences);
         /*println!("Getting paths by dividing..");

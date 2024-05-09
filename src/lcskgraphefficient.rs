@@ -12,21 +12,32 @@ pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, start: usize, topo_map: &HashMap<usize, usize>) {
     let mut current_node = start;
-    let mut neighbours = graph.neighbors(NodeIndex::new(current_node));
+    // created the visit vec
+    let mut visited_node: Vec<bool> = vec![false; graph.node_count() + 1];
+    // created the stack to keep track
+    let mut node_stack: Vec<(usize, usize)> = vec![];
     let mut current_index = 0;
-    while graph.neighbors(NodeIndex::new(current_node)).count() == 0 {
+    while graph.neighbors(NodeIndex::new(current_node)).count() != 0 {
         // check if visited if not add neigbours to stack
-        for neighbour in neighbours {
-            // check if the neighbouring nodes are in sequence
-            if graph.raw_nodes()[neighbour.index()].weight == sequence[current_index] {
-                // add to stack the node index and current index
+        //println!("{}", current_node);
+        let current_node_mapped = *topo_map.get(&current_node).unwrap();
+        if !visited_node[current_node_mapped] {
+            visited_node[current_node_mapped] = true;
+            for neighbour in graph.neighbors(NodeIndex::new(current_node)) {
+                // check if the neighbouring nodes are in sequence
+                if graph.raw_nodes()[neighbour.index()].weight == sequence[current_index + 1] {
+                    // add to stack the node index and current index
+                    node_stack.push((neighbour.index(), current_index + 1));
+                }
             }
         }
         // pop one from stack and process update index
-        
-        // update neighbours
-        neighbours = graph.neighbors(NodeIndex::new(current_node));
-        current_index += 1;
+        if node_stack.len() > 0  {
+            (current_node, current_index) = node_stack.pop().unwrap();
+        }
+        else {
+            break;
+        }       
     }
 }
 
