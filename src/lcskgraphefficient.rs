@@ -14,7 +14,8 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
     // hash the query
     let set = hash_kmers(query, k);
     // go through the paths and get the indices of path and make a list with query index, graph index, paths
-    
+    // aggregated result
+    let mut all_result_per_path: Vec<Vec<(u32, u32, u32, u32)>> = vec![vec![]; graph_sequences.len()]; // seq, graph, graph + k, prev node in path
     let mut kmers_result_vec: Vec<(u32, u32)> = vec![];
     let mut kmers_plus_k: Vec<u32> = vec![];
     let mut kmers_paths: Vec<Vec<usize>> = vec![];
@@ -33,19 +34,35 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
             else {
                 graph_index_minus_1 = u32::MAX;
             }
-            // if it is in the result vec, add path if indices match and path different
-            if let Some(index_result) = kmers_result_vec.iter().position(|r| (r.0, r.1) == (a_match.0, graph_index)) {
-                kmers_paths[index_result].push(index);
-                kmers_previous_node_in_paths[index_result].push(graph_index_minus_1);
-            }
-            // not in the result vec just add
-            else {
-                kmers_result_vec.push((a_match.0, graph_index));
-                kmers_plus_k.push(graph_index_plus_k);
-                kmers_paths.push(vec![index]);
-                kmers_previous_node_in_paths.push(vec![graph_index_minus_1]);
+            all_result_per_path[index].push((a_match.0, graph_index, graph_index_plus_k, graph_index_minus_1));
+        }
+    }
+    // using all result get the required results
+    let mut loc_to_data: HashMapFx<(u32, u32), (u32, Vec<u32>, Vec<usize>)> = HashMapFx::default();
+    for (index, path_result) in all_result_per_path.iter().enumerate() {
+        for result_entry in path_result {
+            let key = (result_entry.0, result_entry.1);
+            // check if in hash map
+            match loc_to_data.get_mut(&key){
+                Some(x) => {
+                    // if in hash map, add to prev node and path vecs
+                    assert!(x.0 == result_entry.2);
+                    x.1.push(result_entry.3);
+                    x.2.push(index);
+                },
+                None => {
+                    // if not in hash map add to hash map creating prev node vec and path vec
+                    loc_to_data.insert(key, (result_entry.2, vec![result_entry.3], vec![index]));
+                },
             }
         }
+    }
+    for (key, value) in loc_to_data.into_iter() {
+        kmers_result_vec.push(key);
+        kmers_plus_k.push(value.0);
+        kmers_paths.push(value.2.clone());
+        kmers_previous_node_in_paths.push(value.1.clone());
+        //println!("{:?} / {:?}", key, value);
     }
     (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths)
 }
@@ -67,9 +84,16 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
         }
     }
     loop {
-        // check if visited if not add neigbours to stack
-        println!("{}", current_node);
+        //println!("{}", current_node);
         let current_node_mapped = *topo_map.get(&current_node).unwrap();
+        // push to vecs required stuff
+        final_path[current_index] = current_node_mapped;
+        final_sequence[current_index] = graph.raw_nodes()[current_node].weight;
+        // break if end of sequence reached
+        if current_index >= sequence.len() - 1 {
+            break;
+        }
+        // check if visited if not add neigbours to stack
         if !visited_node[current_node_mapped] {
             visited_node[current_node_mapped] = true;
             for neighbour in graph.neighbors(NodeIndex::new(current_node)) {
@@ -80,13 +104,7 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
                 }
             }
         }
-        // push to vecs required stuff
-        final_path[current_index] = current_node_mapped;
-        final_sequence[current_index] = graph.raw_nodes()[current_node].weight;
-        // break if end of sequence reached
-        if current_index >= sequence.len() - 1 {
-            break;
-        }
+        
         // pop one from stack and process update index
         if node_stack.len() > 0  {
             (current_node, current_index) = node_stack.pop().unwrap();

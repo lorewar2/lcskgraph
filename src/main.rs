@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use poa::*;
 use petgraph::dot::Dot;
 use petgraph::visit::Topo;
-use crate::lcskgraphefficient::{divide_poa_graph_get_paths, find_sequence_in_graph, dfs_get_sequence_paths, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
+use crate::lcskgraphefficient::{divide_poa_graph_get_paths, find_sequence_in_graph, dfs_get_sequence_paths, better_find_kmer_matches, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
 use lcskgraphdp::Aligner as aligner2;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -22,18 +22,20 @@ fn main() {
     //let x = b"CTATAGAGTA".to_vec();
     
     //let y = b"ATTATG".to_vec();
-    let seed = 9; // 9 and 105
+    for seed in 0..10000 // 9 and 105
     {
-        println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(20, 3, seed);
+        //println!("seed {}", seed);
+        let mut string_vec = get_random_sequences_from_generator(50, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
-        let y = string_vec[2].as_bytes().to_vec();
-        let z = string_vec[1].as_bytes().to_vec();
-        string_vec.pop();
+        let y = string_vec.pop().unwrap().as_bytes().to_vec();
+        
         let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-        aligner.global(&z).add_to_graph();
+        for index in 1..string_vec.len() {
+            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+        }
+        
         let output_graph = aligner.graph();
-        println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
         let mut all_paths: Vec<Vec<usize>> = vec![];
         let mut all_sequences: Vec<Vec<u8>> = vec![];
 
@@ -48,36 +50,46 @@ fn main() {
             topo_map.insert(node.index(), incrementing_index);
             incrementing_index += 1;
         }
+        //println!("Finding graph IDs");
         //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
         for sequence in string_vec {
             let (temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map);
             all_paths.push(temp_path);
             all_sequences.push(temp_sequence);
         }
-        
+        //println!("Finding kmers");
+        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        //println!("LCSKgraph");
+        let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
+        //println!("{} {}", all_paths.len(), k_score);
+        let k_new_score = k_score;
+        //println!("Getting paths by dividing..");
+        //let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
+        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
+        //println!("{:?}", kmer_pos_vec);
+        //println!("{:?}", kmers_plus_k);
+        //let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, max_paths, KMER);
+        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        let mut all_paths: Vec<Vec<usize>> = vec![];
+        let mut all_sequences: Vec<Vec<u8>> = vec![];
+        simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        //println!("{}", all_paths.len());
         let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
         let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
-        println!("{} {}", all_paths.len(), k_score);
-
-        /*println!("Getting paths by dividing..");
-        let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
-        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
-        println!("{:?}", kmer_pos_vec);
-        println!("{:?}", kmers_plus_k);
-        let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, max_paths, KMER);
-        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
-        //simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        //println!("{}", all_paths.len());
-        //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
-        //let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
         //println!("{} {}", all_paths.len(), k_score);
+        let k_old_score = k_score;
         // test fulldplcsk++ 
         //let mut aligner2 = aligner2::new(0, 0, 0, &x);
         //aligner2.global(&y, KMER);
         //let dp_score = aligner2.traceback.get_score();
         //println!("efficient_score: {} dp_score: {}", k_score, dp_score);
-        //assert!(k_score == dp_score as u32);
-        */
+        if k_new_score != k_old_score {
+            println!("{} {}", k_new_score, k_old_score);
+        }
+        else {
+            println!("Matched");
+        }
+        //assert!(k_new_score == k_old_score);
     }
 }
 
@@ -141,7 +153,7 @@ pub fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequen
                 _ => {}
             }
         }
-        println!("{:?}", mutseq.iter().collect::<String>());
+        //println!("{:?}", mutseq.iter().collect::<String>());
         //insert to vector
         randomvec.push(mutseq.iter().collect::<String>());
     }
