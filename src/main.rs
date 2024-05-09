@@ -25,7 +25,7 @@ fn main() {
     let seed = 9; // 9 and 105
     {
         println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(20000, 3, seed);
+        let mut string_vec = get_random_sequences_from_generator(20, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec[2].as_bytes().to_vec();
         let z = string_vec[1].as_bytes().to_vec();
@@ -49,9 +49,16 @@ fn main() {
             incrementing_index += 1;
         }
         //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        find_sequence_in_graph (string_vec[1].as_bytes().to_vec().clone(), output_graph, 0, &topo_map);
-        println!("{:?}", all_paths);
-        println!("{:?}", all_sequences);
+        for sequence in string_vec {
+            let (temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map);
+            all_paths.push(temp_path);
+            all_sequences.push(temp_sequence);
+        }
+        
+        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
+        println!("{} {}", all_paths.len(), k_score);
+
         /*println!("Getting paths by dividing..");
         let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
         let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);

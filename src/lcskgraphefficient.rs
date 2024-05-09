@@ -10,16 +10,65 @@ use petgraph::{Directed, Graph};
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, start: usize, topo_map: &HashMap<usize, usize>) {
-    let mut current_node = start;
+pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<u32>, Vec<Vec<usize>>, Vec<Vec<u32>>) {
+    // hash the query
+    let set = hash_kmers(query, k);
+    // go through the paths and get the indices of path and make a list with query index, graph index, paths
+    
+    let mut kmers_result_vec: Vec<(u32, u32)> = vec![];
+    let mut kmers_plus_k: Vec<u32> = vec![];
+    let mut kmers_paths: Vec<Vec<usize>> = vec![];
+    let mut kmers_previous_node_in_paths: Vec<Vec<u32>> = vec![];
+    for (index, seq) in graph_sequences.iter().enumerate() {
+        let matches = find_kmer_matches_seq1_hashed(&set, seq, k);
+        // go through the matches and see if they are in the already made list
+        for a_match in matches {
+            // first get the graph index for the match
+            let graph_index = graph_ids[index][a_match.1 as usize] as u32;
+            let graph_index_minus_1;
+            let graph_index_plus_k = graph_ids[index][a_match.1 as usize - 1 + k] as u32;
+            if a_match.1 > 0 {
+                graph_index_minus_1 = graph_ids[index][a_match.1 as usize - 1] as u32;
+            }
+            else {
+                graph_index_minus_1 = u32::MAX;
+            }
+            // if it is in the result vec, add path if indices match and path different
+            if let Some(index_result) = kmers_result_vec.iter().position(|r| (r.0, r.1) == (a_match.0, graph_index)) {
+                kmers_paths[index_result].push(index);
+                kmers_previous_node_in_paths[index_result].push(graph_index_minus_1);
+            }
+            // not in the result vec just add
+            else {
+                kmers_result_vec.push((a_match.0, graph_index));
+                kmers_plus_k.push(graph_index_plus_k);
+                kmers_paths.push(vec![index]);
+                kmers_previous_node_in_paths.push(vec![graph_index_minus_1]);
+            }
+        }
+    }
+    (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths)
+}
+
+pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices: &Vec<usize>, topo_map: &HashMap<usize, usize>) -> (Vec<usize>, Vec<u8>) {
+    let mut current_node = 0;
     // created the visit vec
     let mut visited_node: Vec<bool> = vec![false; graph.node_count() + 1];
     // created the stack to keep track
     let mut node_stack: Vec<(usize, usize)> = vec![];
     let mut current_index = 0;
-    while graph.neighbors(NodeIndex::new(current_node)).count() != 0 {
+    let mut final_path = vec![0; sequence.len()];
+    let mut final_sequence = vec![0; sequence.len()];
+    // find the first match to index 0 of sequence
+    for (index, topo_index) in topo_indices.iter().enumerate() {
+        if graph.raw_nodes()[*topo_index].weight == sequence[current_index] {
+            current_node = *topo_index;
+            break;
+        }
+    }
+    loop {
         // check if visited if not add neigbours to stack
-        //println!("{}", current_node);
+        println!("{}", current_node);
         let current_node_mapped = *topo_map.get(&current_node).unwrap();
         if !visited_node[current_node_mapped] {
             visited_node[current_node_mapped] = true;
@@ -31,14 +80,23 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, start: usize
                 }
             }
         }
+        // push to vecs required stuff
+        final_path[current_index] = current_node_mapped;
+        final_sequence[current_index] = graph.raw_nodes()[current_node].weight;
+        // break if end of sequence reached
+        if current_index >= sequence.len() - 1 {
+            break;
+        }
         // pop one from stack and process update index
         if node_stack.len() > 0  {
             (current_node, current_index) = node_stack.pop().unwrap();
         }
+        // break if stack is empty
         else {
             break;
-        }       
+        }
     }
+    (final_path, final_sequence)
 }
 
 pub fn dfs_get_sequence_paths (
