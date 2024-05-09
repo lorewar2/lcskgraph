@@ -25,10 +25,10 @@ fn main() {
     let seed = 9; // 9 and 105
     {
         println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(20, 3, seed);
+        let mut string_vec = get_random_sequences_from_generator(10000, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
-        let z = string_vec[2].as_bytes().to_vec();
-        let y = string_vec[1].as_bytes().to_vec();
+        let y = string_vec[2].as_bytes().to_vec();
+        let z = string_vec[1].as_bytes().to_vec();
         string_vec.pop();
         let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
         aligner.global(&z).add_to_graph();
@@ -48,7 +48,7 @@ fn main() {
             topo_map.insert(node.index(), incrementing_index);
             incrementing_index += 1;
         }
-        dfs_get_sequence_paths(0, &string_vec, string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
         println!("{:?}", all_paths);
         println!("{:?}", all_sequences);
         /*println!("Getting paths by dividing..");

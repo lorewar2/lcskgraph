@@ -10,9 +10,28 @@ use petgraph::{Directed, Graph};
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, start: usize, topo_map: &HashMap<usize, usize>) {
+    let mut current_node = start;
+    let mut neighbours = graph.neighbors(NodeIndex::new(current_node));
+    let mut current_index = 0;
+    while graph.neighbors(NodeIndex::new(current_node)).count() == 0 {
+        // check if visited if not add neigbours to stack
+        for neighbour in neighbours {
+            // check if the neighbouring nodes are in sequence
+            if graph.raw_nodes()[neighbour.index()].weight == sequence[current_index] {
+                // add to stack the node index and current index
+            }
+        }
+        // pop one from stack and process update index
+        
+        // update neighbours
+        neighbours = graph.neighbors(NodeIndex::new(current_node));
+        current_index += 1;
+    }
+}
+
 pub fn dfs_get_sequence_paths (
     index: usize,
-    sequences: &Vec<String>,
     mut temp_sequences: Vec<String>,
     graph: &POAGraph, 
     start: usize,
@@ -23,24 +42,32 @@ pub fn dfs_get_sequence_paths (
     topo_map: &HashMap<usize, usize>
 ) {
     // go through the temp sequences and pop the ones which do not have the current base.
-    for seq_index in temp_sequences.len() - 1..0 {
-        if temp_sequences[seq_index].as_bytes()[index] != graph.raw_nodes()[start].weight {
-            temp_sequences.remove(seq_index);
+    let seq_len = temp_sequences.len();
+    for seq_index in  0..seq_len {
+        let reverse_index = seq_len - seq_index - 1;
+        println!("{}", reverse_index);
+        if temp_sequences[reverse_index].as_bytes()[index] != graph.raw_nodes()[start].weight {
+            temp_sequences.remove(reverse_index);
+            println!("removed {} ", reverse_index);
         }
     }
+    if temp_sequences.len() == 0 {
+        println!("removed both {}", index);
+    }
+    
     let mut path = current_path.clone();
     let mut sequence = current_sequence.clone();
     path.push(*topo_map.get(&start).unwrap());
     sequence.push(graph.raw_nodes()[start].weight);
     // if no neighbours, last node reached
-    if graph.neighbors(NodeIndex::new(start)).count() == 0 {
+    if (graph.neighbors(NodeIndex::new(start)).count() == 0) && (temp_sequences.len() > 0) {
         all_paths.push(path.clone());
         all_sequences.push(sequence.clone());
     } else {
         // go through neighbours recursively
         if temp_sequences.len() > 0 {
             for neighbor in graph.neighbors(NodeIndex::new(start)) {
-                dfs_get_sequence_paths(index + 1, sequences, temp_sequences.clone(), graph, neighbor.index(), path.clone(), sequence.clone(), all_paths, all_sequences, topo_map);
+                dfs_get_sequence_paths(index + 1,  temp_sequences.clone(), graph, neighbor.index(), path.clone(), sequence.clone(), all_paths, all_sequences, topo_map);
             }
         }
     }
