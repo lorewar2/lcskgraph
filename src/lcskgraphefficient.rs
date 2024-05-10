@@ -6,6 +6,7 @@ use std::hash::BuildHasherDefault;
 use petgraph::Outgoing;
 use petgraph::graph::NodeIndex;
 use petgraph::{Directed, Graph};
+use itertools::Itertools;
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -57,12 +58,12 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
             }
         }
     }
-    for (key, value) in loc_to_data.into_iter() {
-        kmers_result_vec.push(key);
+    for (key, value) in loc_to_data.iter().sorted().into_iter() {
+        kmers_result_vec.push(*key);
         kmers_plus_k.push(value.0);
         kmers_paths.push(value.2.clone());
         kmers_previous_node_in_paths.push(value.1.clone());
-        //println!("{:?} / {:?}", key, value);
+        println!("{:?} / {:?}", key, value);
     }
     (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths)
 }
@@ -469,6 +470,11 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
     }
     // sorting is okay with topologically converted indices
     events.sort_unstable();
+    println!("{:?}", kmer_pos_vec);
+    for event in &events {
+        println!("{:?}", event);
+    }
+    println!("DONE");
     let mut max_bit_tree_path = vec![];
     // generate empty fenwick trees
     for (_index, n) in max_ns.iter().enumerate() {
@@ -497,25 +503,25 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
         // is start if higher than this
         let is_start = ev.3 >= (kmer_pos_vec.len() as u32);
         if is_start {
-            //print!("IS START \n");
+            print!("IS START \n");
             dp[p] = (k, -1);
             // go through the paths available in this event, and get the max corrosponding value and pos
             for path_index in 0..ev.4.len() {
                 let path = ev.4[path_index];
                 let prev_node = ev.5[path_index];
                 if prev_node != u32::MAX {
-                    //println!("prev node value = {}", prev_node);
+                    println!("prev node value = {}", prev_node);
                     let (temp_value, temp_position) = max_bit_tree_path[path].get(prev_node as usize);
                     //println!("temp value from fenwick tree {}", temp_value);
                     if (temp_value + k > dp[p].0) && (temp_value > 0) {
                         dp[p] = (k + temp_value, temp_position as i32);
                         best_dp = max(best_dp, (dp[p].0, p as i32, path));
-                        //println!("best_dp {}", best_dp.0);
+                        println!("best_dp {}", best_dp.0);
                     }
                 }
             }
         } else {
-            //print!("IS END \n");
+            print!("IS END \n");
             // See if this kmer continues a different kmer
             if ev.0 >= k {
                 for path_index in 0..ev.4.len() {
@@ -523,14 +529,14 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
                     let prev_node = ev.5[path_index];
                     if prev_node != u32::MAX {
                         if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k, prev_node)) {
-                            //println!("!!!!!!!!!!");
+                            println!("!!!!!!!!!!");
                             let prev_score = dp[cont_idx].0;
                             let candidate = (prev_score + 1, cont_idx as i32);
                             dp[p] = max(dp[p], candidate);
                             best_dp = max(best_dp, (dp[p].0, p as i32, path));
-                            //println!("candidate location {} {}", ev.0 - k, prev_node);
-                            //println!("cont value from candidate p {} score {}", cont_idx, candidate.0);
-                            //println!("best_dp {}", best_dp.0);
+                            println!("candidate location {} {}", ev.0 - k, prev_node);
+                            println!("cont value from candidate p {} score {}", cont_idx, candidate.0);
+                            println!("best_dp {}", best_dp.0);
                         }
                     }
                 }
@@ -545,10 +551,12 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
     let (best_score, mut prev_match, mut path) = best_dp;
     //println!("BEST SCORE: {} PREV_MATCH: {}", best_score, prev_match);
     //println!("PATHS");
+    let mut index = 0;
     while prev_match >= 0 {
-        //println!("{} ", prev_match);
+        println!("{} ", prev_match);
         traceback.push(prev_match as usize);
         prev_match = dp[prev_match as usize].1;
+        index += 1;
     }
     //traceback.reverse();
     //path :traceback;

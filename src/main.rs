@@ -22,10 +22,10 @@ fn main() {
     //let x = b"CTATAGAGTA".to_vec();
     
     //let y = b"ATTATG".to_vec();
-    for seed in 0..10000 // 9 and 105
+    let seed = 36; // 9 and 105
     {
-        //println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(50, 3, seed);
+        println!("seed {}", seed);
+        let mut string_vec = get_random_sequences_from_generator(10, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec.pop().unwrap().as_bytes().to_vec();
         
@@ -60,13 +60,14 @@ fn main() {
         //println!("Finding kmers");
         let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
         //println!("LCSKgraph");
+        println!("{:?}", kmer_pos_vec);
         let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
         //println!("{} {}", all_paths.len(), k_score);
         let k_new_score = k_score;
         //println!("Getting paths by dividing..");
         //let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
         //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
-        //println!("{:?}", kmer_pos_vec);
+        
         //println!("{:?}", kmers_plus_k);
         //let k_score = lcskpp_graph_for_divided(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, max_paths, KMER);
         //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
@@ -74,7 +75,8 @@ fn main() {
         let mut all_sequences: Vec<Vec<u8>> = vec![];
         simple_dfs_all_paths(output_graph, 0, vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
         //println!("{}", all_paths.len());
-        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        println!("{:?}", kmer_pos_vec);
         let k_score = lcskpp_graph(kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER);
         //println!("{} {}", all_paths.len(), k_score);
         let k_old_score = k_score;
@@ -89,7 +91,7 @@ fn main() {
         else {
             println!("Matched");
         }
-        //assert!(k_new_score == k_old_score);
+        assert!(k_new_score == k_old_score);
     }
 }
 
