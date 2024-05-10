@@ -68,7 +68,7 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
     (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths)
 }
 
-pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices: &Vec<usize>, topo_map: &HashMap<usize, usize>) -> (Vec<usize>, Vec<u8>) {
+pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices: &Vec<usize>, topo_map: &HashMap<usize, usize>, error_index: usize) -> (bool, Vec<usize>, Vec<u8>) {
     let mut current_node = 0;
     // created the visit vec
     let mut visited_node: Vec<bool> = vec![false; graph.node_count() + 1];
@@ -77,21 +77,28 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
     let mut current_index = 0;
     let mut final_path = vec![0; sequence.len()];
     let mut final_sequence = vec![0; sequence.len()];
-    // find the first match to index 0 of sequence
+    let mut error_occured = false;
+    // find the first match to index 0 of sequence, if there is error in processing choose the next topo skipping error one
+    let mut current_error_index = 0;
     for (index, topo_index) in topo_indices.iter().enumerate() {
         if graph.raw_nodes()[*topo_index].weight == sequence[current_index] {
             current_node = *topo_index;
-            break;
+            println!("did break at index {}", index);
+            if error_index == current_error_index {
+                break;
+            }
+            current_error_index += 1;
         }
     }
     loop {
-        //println!("{}", current_node);
+        println!("current {}", current_node);
         let current_node_mapped = *topo_map.get(&current_node).unwrap();
         // push to vecs required stuff
         final_path[current_index] = current_node_mapped;
         final_sequence[current_index] = graph.raw_nodes()[current_node].weight;
         // break if end of sequence reached
         if current_index >= sequence.len() - 1 {
+            println!("broke here 1");
             break;
         }
         // check if visited if not add neigbours to stack
@@ -112,10 +119,15 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
         }
         // break if stack is empty
         else {
+            println!("broke here 2");
             break;
         }
     }
-    (final_path, final_sequence)
+    if current_index != sequence.len() - 1 {
+        error_occured = true;
+        println!("ERROR");
+    }
+    (error_occured, final_path, final_sequence)
 }
 
 pub fn dfs_get_sequence_paths (
