@@ -11,21 +11,28 @@ use itertools::Itertools;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<u32>, Vec<Vec<usize>>, Vec<Vec<u32>>) {
+pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<u32>, Vec<Vec<usize>>, Vec<Vec<u32>>, Vec<Vec<u32>>) {
     // hash the query
     let set = hash_kmers(query, k);
     // go through the paths and get the indices of path and make a list with query index, graph index, paths
     // aggregated result
-    let mut all_result_per_path: Vec<Vec<(u32, u32, u32, u32)>> = vec![vec![]; graph_sequences.len()]; // seq, graph, graph + k, prev node in path
+    let mut all_result_per_path: Vec<Vec<(u32, u32, u32, u32, Vec<u32>)>> = vec![vec![]; graph_sequences.len()]; // seq, graph, graph + k, prev node in path, path index
     let mut kmers_result_vec: Vec<(u32, u32)> = vec![];
     let mut kmers_plus_k: Vec<u32> = vec![];
     let mut kmers_paths: Vec<Vec<usize>> = vec![];
     let mut kmers_previous_node_in_paths: Vec<Vec<u32>> = vec![];
+    let mut kmer_graph_path: Vec<Vec<u32>>= vec![];
     for (index, seq) in graph_sequences.iter().enumerate() {
         let matches = find_kmer_matches_seq1_hashed(&set, seq, k);
         // go through the matches and see if they are in the already made list
         for a_match in matches {
+            // get the path index and save it 
+            let mut graph_path = vec![];
             // first get the graph index for the match
+            
+            for graph_node in a_match.1..a_match.1 + k as u32 {
+                graph_path.push(graph_ids[index][graph_node as usize] as u32);
+            }
             let graph_index = graph_ids[index][a_match.1 as usize] as u32;
             let graph_index_minus_1;
             let graph_index_plus_k = graph_ids[index][a_match.1 as usize - 1 + k] as u32;
@@ -35,11 +42,11 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
             else {
                 graph_index_minus_1 = u32::MAX;
             }
-            all_result_per_path[index].push((a_match.0, graph_index, graph_index_plus_k, graph_index_minus_1));
+            all_result_per_path[index].push((a_match.0, graph_index, graph_index_plus_k, graph_index_minus_1, graph_path));
         }
     }
     // using all result get the required results
-    let mut loc_to_data: HashMapFx<(u32, u32), (u32, Vec<u32>, Vec<usize>)> = HashMapFx::default();
+    let mut loc_to_data: HashMapFx<(u32, u32), (u32, Vec<u32>, Vec<usize>, Vec<u32>)> = HashMapFx::default();
     for (index, path_result) in all_result_per_path.iter().enumerate() {
         for result_entry in path_result {
             let key = (result_entry.0, result_entry.1);
@@ -53,7 +60,7 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
                 },
                 None => {
                     // if not in hash map add to hash map creating prev node vec and path vec
-                    loc_to_data.insert(key, (result_entry.2, vec![result_entry.3], vec![index]));
+                    loc_to_data.insert(key, (result_entry.2, vec![result_entry.3], vec![index], result_entry.4.clone()));
                 },
             }
         }
@@ -63,9 +70,10 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
         kmers_plus_k.push(value.0);
         kmers_paths.push(value.2.clone());
         kmers_previous_node_in_paths.push(value.1.clone());
+        kmer_graph_path.push(value.3.clone());
         println!("{:?} / {:?}", key, value);
     }
-    (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths)
+    (kmers_result_vec, kmers_plus_k, kmers_paths, kmers_previous_node_in_paths, kmer_graph_path)
 }
 
 pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices: &Vec<usize>, topo_map: &HashMap<usize, usize>, error_index: usize) -> (bool, Vec<usize>, Vec<u8>) {
@@ -458,7 +466,7 @@ pub fn simple_dfs_with_start_end (
     }
 }
 
-pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, num_of_paths: usize, k: usize) -> u32 {
+pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, num_of_paths: usize, k: usize, kmer_graph_index: Vec<Vec<u32>>) -> u32 {
     // return nothing if empty
     if kmer_pos_vec.is_empty() {
         return 0;
@@ -493,7 +501,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmers_plus_k: Vec<u32>, kmer_
         let max_col_dp: MaxBitTree<(u32, u32)> = MaxBitTree::new(*n as usize);
         max_bit_tree_path.push(max_col_dp);
     }
-    let mut dp: Vec<(u32, i32)> = Vec::with_capacity(events.len());
+    let mut dp: Vec<(u32, i32)> = Vec::with_capacity(events.len()); //index prev match, 
     let mut best_dp = (k, 0, 0); // score, coloumn, path
     // update trees only after the next query point is hit
     let mut tree_update_required_level = 0;
