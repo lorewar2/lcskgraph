@@ -103,34 +103,3 @@ where
         t1 + t2
     }
 }
-
-/// Fenwick tree specialized for prefix-sum
-pub type SumBitTree<T> = FenwickTree<T, SumOp>;
-
-#[cfg(test)]
-mod test_bit_tree {
-    use super::MaxBitTree;
-
-    #[test]
-    pub fn test_bit_tree() {
-        let mut bit = MaxBitTree::new(10);
-
-        bit.set(0, (1, 0));
-        bit.set(1, (1, 1));
-        bit.set(2, (2, 2));
-        bit.set(3, (3, 3));
-        bit.set(4, (2, 4));
-        bit.set(5, (2, 5));
-        bit.set(6, (4, 6));
-        bit.set(7, (5, 7));
-
-        assert_eq!(bit.get(0), (1, 0));
-        assert_eq!(bit.get(1), (1, 1));
-        assert_eq!(bit.get(2), (2, 2));
-        assert_eq!(bit.get(3), (3, 3));
-        assert_eq!(bit.get(4), (3, 3));
-        assert_eq!(bit.get(5), (3, 3));
-        assert_eq!(bit.get(6), (4, 6));
-        assert_eq!(bit.get(7), (5, 7));
-    }
-}

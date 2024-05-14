@@ -12,14 +12,12 @@ use petgraph::graph::NodeIndex;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
-const KMER: usize = 10;
+const KMER: usize = 2;
 fn main() {
-    let mut match_count = 0;
-    let mut mismatch_count = 0;
-    for seed in 0.. 10000
+    let seed = 0;
     {
         println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(50, 10, seed);
+        let mut string_vec = get_random_sequences_from_generator(50, 3, seed);
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec.pop().unwrap().as_bytes().to_vec();
         
@@ -66,12 +64,12 @@ fn main() {
             }
         }
         //println!("Finding kmers");
-        let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
         //println!("LCSKgraph");
         println!("{:?}", kmer_pos_vec);
-        let k_score = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_map);
+        let (lcsk_path, k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
+
         //println!("{} {}", all_paths.len(), k_score);
-        let k_new_score = k_score;
         /*//println!("Getting paths by dividing..");
         //let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
         //let (kmer_pos_vec, kmers_plus_k, kmer_path_vec, kmers_previous_node_in_paths) = find_kmer_matches_for_divided(&y, &all_all_sequences, &all_all_paths, KMER);
