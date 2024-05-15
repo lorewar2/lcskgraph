@@ -1,4 +1,5 @@
 mod poa;
+mod poa_lcsk_banded;
 mod lcskgraphefficient;
 mod lcskgraphdp;
 mod bit_tree;
@@ -8,11 +9,12 @@ use petgraph::{dot::Dot, Direction::Incoming};
 use petgraph::visit::Topo;
 use crate::lcskgraphefficient::{divide_poa_graph_get_paths, find_sequence_in_graph, dfs_get_sequence_paths, better_find_kmer_matches, find_kmer_matches, find_kmer_matches_for_divided, lcskpp_graph, lcskpp_graph_for_divided, simple_dfs_all_paths};
 use lcskgraphdp::Aligner as aligner2;
+use poa_lcsk_banded::Aligner as aligner_banded;
 use petgraph::graph::NodeIndex;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
-const KMER: usize = 2;
+const KMER: usize = 10;
 fn main() {
     let seed = 0;
     {
@@ -44,7 +46,7 @@ fn main() {
         }
         //println!("Finding graph IDs");
         //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        for sequence in string_vec {
+        for sequence in string_vec.clone() {
             println!("{:?}", sequence);
             let mut error_index = 0;
             loop {
@@ -69,6 +71,10 @@ fn main() {
         println!("{:?}", kmer_pos_vec);
         let (lcsk_path, k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
 
+        let mut aligner = aligner_banded::new(2, -2, -2, &x, 0, 0, 1);
+        for index in 1..string_vec.len() {
+            aligner.global(&string_vec[index].as_bytes().to_vec(), &lcsk_path, 10).add_to_graph();
+        }
         //println!("{} {}", all_paths.len(), k_score);
         /*//println!("Getting paths by dividing..");
         //let (all_all_paths, all_all_sequences, max_paths) = divide_poa_graph_get_paths (output_graph, &topo_indices, 2, CUT_THRESHOLD, &topo_map);
