@@ -38,11 +38,11 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     // ev.1 = ev.6[0]
     // sorting is okay with topologically converted indices
     events.sort_unstable();
-    println!("{:?}", kmer_pos_vec);
+    //println!("{:?}", kmer_pos_vec);
     for event in &events {
-        println!("{:?}", event);
+        //println!("{:?}", event);
     }
-    println!("DONE");
+    //println!("DONE");
     let mut max_bit_tree_path = vec![];
     // generate empty fenwick trees
     for (_index, n) in max_ns.iter().enumerate() {
@@ -71,7 +71,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         // is start if higher than this
         let is_start = ev.1 >= (kmer_pos_vec.len() as u32);
         if is_start {
-            print!("IS START \n");
+            //print!("IS START \n");
             dp[p].0 = k;
             dp[p].1 = -1;
             dp[p].2 = ev.4;
@@ -81,19 +81,19 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                 let path = ev.2[path_index];
                 let prev_node = ev.3[path_index];
                 if prev_node != u32::MAX {
-                    println!("prev node value = {}", prev_node);
+                    //println!("prev node value = {}", prev_node);
                     let (temp_value, temp_position) = max_bit_tree_path[path].get(prev_node as usize);
                     //println!("temp value from fenwick tree {}", temp_value);
                     if (temp_value + k > dp[p].0) && (temp_value > 0) {
                         dp[p].0 = k + temp_value;
                         dp[p].1 = temp_position as i32;
                         best_dp = max(best_dp, (dp[p].0, p as i32, path));
-                        println!("best_dp {}", best_dp.0);
+                        //println!("best_dp {}", best_dp.0);
                     }
                 }
             }
         } else {
-            print!("IS END \n");
+            //print!("IS END \n");
             // See if this kmer continues a different kmer
             if ev.0 >= k {
                 for path_index in 0..ev.2.len() {
@@ -101,20 +101,20 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                     let prev_node = ev.3[path_index];
                     if prev_node != u32::MAX {
                         if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k, prev_node)) {
-                            println!("!!!!!!!!!!");
+                            //println!("!!!!!!!!!!");
                             let prev_score = dp[cont_idx].0;
                             //let candidate = (prev_score + 1, cont_idx as i32, prev_path);
                             if prev_score + 1 > dp[p].0 {
-                                println!("CONTINUTING VALUE {}", dp[p].2.len());
+                                //println!("CONTINUTING VALUE {}", dp[p].2.len());
                                 dp[p].0 = prev_score + 1;
                                 dp[p].1 = cont_idx as i32;
                                 dp[p].3 = dp[p].3 + 1;
                                 dp[p].2 = vec![dp[p].2[dp[p].2.len() - 1]];
                             }
                             best_dp = max(best_dp, (dp[p].0, p as i32, path));
-                            println!("candidate location {} {}", ev.0 - k, prev_node);
-                            println!("cont value from candidate p {} score {}", cont_idx, dp[p].0);
-                            println!("best_dp {}", best_dp.0);
+                            //println!("candidate location {} {}", ev.0 - k, prev_node);
+                            //println!("cont value from candidate p {} score {}", cont_idx, dp[p].0);
+                            //println!("best_dp {}", best_dp.0);
                         }
                     }
                 }
@@ -139,7 +139,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         traceback.push(prev_match as usize);
         dp[prev_match as usize].2.reverse();
         let mut query_pos = dp[prev_match as usize].3 + dp[prev_match as usize].2.len() as u32  - 1;
-        println!("ORIGINAL Q POS {}", query_pos);
+        //println!("ORIGINAL Q POS {}", query_pos);
         for node in &dp[prev_match as usize].2 {
             
             let converted_node = topo_map[*node as usize];
@@ -147,18 +147,18 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             if last_node == usize::MAX {
                 last_node = current_node;
             }
-            println!("q pos {}", query_pos);
+            //println!("q pos {}", query_pos);
             query_graph_path.push((query_pos as usize, converted_node));
             query_pos -= 1;
             //println!("{} != {}", last_node, current_node);
             assert!(last_node >= current_node);
             last_node = current_node;
         }
-        println!("");
+        //println!("");
         prev_match = dp[prev_match as usize].1;
     }
     query_graph_path.reverse();
-    println!("{:?}", query_graph_path);
+    //println!("{:?}", query_graph_path);
     (query_graph_path, best_score)
 }
 
@@ -219,7 +219,7 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
         kmers_paths.push(value.2.clone());
         kmers_previous_node_in_paths.push(value.1.clone());
         kmer_graph_path.push(value.3.clone());
-        println!("{:?} / {:?}", key, value);
+        //println!("{:?} / {:?}", key, value);
     }
     (kmers_result_vec, kmers_paths, kmers_previous_node_in_paths, kmer_graph_path)
 }
@@ -239,7 +239,7 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
     for (index, topo_index) in topo_indices.iter().enumerate() {
         if graph.raw_nodes()[*topo_index].weight == sequence[current_index] {
             current_node = *topo_index;
-            println!("did break at index {}", index);
+            //println!("did break at index {}", index);
             if error_index == current_error_index {
                 break;
             }
@@ -254,7 +254,7 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
         final_sequence[current_index] = graph.raw_nodes()[current_node].weight;
         // break if end of sequence reached
         if current_index >= sequence.len() - 1 {
-            println!("broke here 1");
+            //println!("broke here 1");
             break;
         }
         // check if visited if not add neigbours to stack
@@ -275,13 +275,13 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
         }
         // break if stack is empty
         else {
-            println!("broke here 2");
+            //println!("broke here 2");
             break;
         }
     }
     if current_index != sequence.len() - 1 {
         error_occured = true;
-        println!("ERROR");
+        //println!("ERROR");
     }
     (error_occured, final_path, final_sequence)
 }
