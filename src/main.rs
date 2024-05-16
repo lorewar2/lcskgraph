@@ -11,10 +11,10 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 
 //const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
-const KMER: usize = 2;
+const KMER: usize = 12;
 const SEQ_LEN: usize = 100;
 const NUM_OF_ITER: u64 = 10;
-const BAND_SIZE: usize = 150;
+const BAND_SIZE: usize = 300;
 
 fn main() {
    run_pacbio_data();
@@ -26,23 +26,22 @@ fn run_pacbio_data() {
     let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
     let mut read_set = vec![];
     let mut current_set = "".to_string();
-    for record_option in bam.records().into_iter() {
-        let temp_read = vec![];
-        match record_option {
-            Some(x) => {
-                let record = x.unwrap();
+    let mut temp_read = vec![];
+    for record_option in bam.records().into_iter() {                                                                            match record_option {                                                                                                       Ok(x) => {                                                                                                                  let record = x;                                                                                                         let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
                 if current_set == "".to_string() {
                     println!("Start here");
-                    current_set = String::from_utf8(record.qname().to_vec()).unwrap();
+                    current_set = record_set;
                     temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
+                    println!()
                 }
-                else if current_set == String::from_utf8(record.qname().to_vec()).unwrap() {
+                else if current_set == record_set {
+
                     println!("Just adding read");
                     temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
                 }
                 else {
                     println!("Read set complete onto the next");
-                    current_set = String::from_utf8(record.qname().to_vec()).unwrap();
+                    current_set = record_set;
                     read_set.push(temp_read);
                     temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
                     if read_set.len() >= 10 {
@@ -51,10 +50,85 @@ fn run_pacbio_data() {
                     }
                 }
             },
-            None => {
+            Err(_) => {
                 break;
             }
         }
+    }
+    for read in read_set{
+        println!("{:?}", read.len());
+    }
+    for (index, reads) in read_set.iter().enumerate() {
+        println!("index {}", seed);
+        let mut string_vec = reads.clone();
+        let x = string_vec[0].as_bytes().to_vec();
+        let y = string_vec.pop().unwrap().as_bytes().to_vec();
+        
+        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+        for index in 1..string_vec.len() {
+            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+        }
+        
+        let output_graph = aligner.graph();
+        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+        let mut all_paths: Vec<Vec<usize>> = vec![];
+        let mut all_sequences: Vec<Vec<u8>> = vec![];
+
+        // get topology ordering
+        let mut topo = Topo::new(&output_graph);
+        // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
+        let mut topo_indices = vec![];
+        let mut topo_map = HashMap::new();
+        let mut incrementing_index: usize = 0;
+        while let Some(node) = topo.next(&output_graph) {
+            topo_indices.push(node.index());
+            topo_map.insert(node.index(), incrementing_index);
+            incrementing_index += 1;
+        }
+        let now = Instant::now();
+
+        //println!("Finding graph IDs");
+        //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+        for sequence in string_vec.clone() {
+            //println!("{:?}", sequence);
+            let mut error_index = 0;
+            loop {
+                let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
+                if error_index > 10 {
+                    //println!("WHAT {} {:?}", sequence, temp_path);
+                    break;
+                }
+                if !error_occured {
+                    //println!("{:?}", temp_path);
+                    all_paths.push(temp_path);
+                    all_sequences.push(temp_sequence);
+                    break;
+                }
+                error_index += 1;
+                
+            }
+        }
+        //println!("Finding kmers");
+        let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+        //println!("LCSKgraph");
+        //println!("{:?}", kmer_pos_vec);
+        let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
+        
+        //let output_graph = aligner.graph();
+        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+        println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
+        let elapsed = now.elapsed();
+        println!("Elapsed: {:.2?}", elapsed);
+        // second try
+        
+        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+        for index in 1..string_vec.len() {
+            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+        }
+        let now = Instant::now();
+        println!("score {}", aligner.semiglobal(&y).alignment().score);
+        let elapsed = now.elapsed();
+        println!("Elapsed: {:.2?}", elapsed);
     }
 }
 
