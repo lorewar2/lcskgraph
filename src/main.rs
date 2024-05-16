@@ -2,20 +2,63 @@ mod poa;
 mod lcskgraphefficient;
 mod lcskgraphdp;
 mod bit_tree;
-use std::collections::HashMap;
+use std::{collections::HashMap, thread::current};
 use poa::*;
 use petgraph::visit::Topo;
 use crate::lcskgraphefficient::{find_sequence_in_graph, better_find_kmer_matches, lcskpp_graph};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::time::Instant;
+use rust_htslib::{bam, bam::Read};
 
 //const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
 const KMER: usize = 2;
 const SEQ_LEN: usize = 100;
 const NUM_OF_ITER: u64 = 10;
-const BAND_SIZE: usize = 12;
+const BAND_SIZE: usize = 150;
 
 fn main() {
+   run_pacbio_data();
+}
+
+fn run_pacbio_data() {
+    let read_file_dir = "data/sample_pacbio.bam";
+    // get data from bam file
+    let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
+    let mut read_set = vec![];
+    let mut current_set = "".to_string();
+    for record_option in bam.records().into_iter() {
+        let temp_read = vec![];
+        match record_option {
+            Some(x) => {
+                let record = x.unwrap();
+                if current_set == "".to_string() {
+                    println!("Start here");
+                    current_set = String::from_utf8(record.qname().to_vec()).unwrap();
+                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
+                }
+                else if current_set == String::from_utf8(record.qname().to_vec()).unwrap() {
+                    println!("Just adding read");
+                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
+                }
+                else {
+                    println!("Read set complete onto the next");
+                    current_set = String::from_utf8(record.qname().to_vec()).unwrap();
+                    read_set.push(temp_read);
+                    temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
+                    if read_set.len() >= 10 {
+                        println!("Got 10 sets exiting!");
+                        break;
+                    }
+                }
+            },
+            None => {
+                break;
+            }
+        }
+    }
+}
+
+fn run_synthetic_data() {
     for seed in 0..NUM_OF_ITER
     {
         println!("seed {}", seed);
