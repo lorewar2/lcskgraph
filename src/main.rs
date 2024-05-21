@@ -57,11 +57,14 @@ fn run_pacbio_data() {
     }
     let mut new_read_set = vec![];
     // reverse the reads and stuff
-    for reads in &read_set{
-        let modified_reads = reverse_complement_filter_and_rearrange_subreads (reads);
-        println!("{:?}", modified_reads.len());
-        new_read_set.push(modified_reads);
-        
+    for reads in &read_set {
+        let mut temp_reads = vec![];
+        temp_reads.push(reads[0].clone());
+        temp_reads.push(reads[2].clone());
+        temp_reads.push(reads[4].clone());
+        println!("{:?}", temp_reads.len());
+        new_read_set.push(temp_reads);
+
     }
 
     for (index, reads) in new_read_set.iter().enumerate() {
@@ -69,7 +72,7 @@ fn run_pacbio_data() {
         let mut string_vec = reads.clone();
         let x = string_vec[0].as_bytes().to_vec();
         let y = string_vec.pop().unwrap().as_bytes().to_vec();
-        
+
         let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
         for index in 1..string_vec.len() {
             aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
@@ -122,7 +125,7 @@ fn run_pacbio_data() {
         
         //let output_graph = aligner.graph();
         //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-        println!("score {}", aligner.global_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
+        println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
         let elapsed = now.elapsed();
         println!("Elapsed: {:.2?}", elapsed);
         // second try
@@ -132,7 +135,7 @@ fn run_pacbio_data() {
             aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
         }
         let now = Instant::now();
-        println!("score {}", aligner.global(&y).alignment().score);
+        println!("score {}", aligner.semiglobal(&y).alignment().score);
         let elapsed = now.elapsed();
         println!("Elapsed: {:.2?}", elapsed);
     }
@@ -280,49 +283,4 @@ fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences:
         randomvec.push(mutseq.iter().collect::<String>());
     }
     randomvec
-}
-
-fn reverse_complement_filter_and_rearrange_subreads (original_subreads: &Vec<String>) -> Vec<String> {
-    let mut seqvec: Vec<String> = vec![];
-    //reverse complement every other line
-    let mut index = 0;
-    for seq in original_subreads {
-        if index % 2 != 0 {
-            let mut tempseq: Vec<char> = vec![];
-            let iterator = seq.chars().rev().into_iter();
-            for char in iterator{
-                tempseq.push(match char {
-                    'A' => 'T',
-                    'C' => 'G',
-                    'G' => 'C',
-                    'T' => 'A',
-                    _ => ' ',
-                });
-            }
-            seqvec.push(tempseq.iter().cloned().collect::<String>());
-        }
-        else {
-            seqvec.push((*seq.clone()).to_string());
-        }
-        index += 1;
-    }
-    //get rid of the last incomplete reading
-    seqvec.pop();
-    //sort the vector by size
-    seqvec.sort_by_key(|seq| seq.len());
-    //drop the sequences which are > 1.8x median size
-    let median_size: f32 = seqvec[(seqvec.len() / 2) - 1].len() as f32;
-    let mut drop_index = seqvec.len();
-    for index in (seqvec.len() / 2)..(seqvec.len() - 1) {
-        if seqvec[index].len() as f32 > (median_size * 1.5) {
-            drop_index = index;
-            break;
-        }
-    }
-    for _ in drop_index..seqvec.len() {
-        seqvec.pop();
-    }
-    // rearrange the seq vector median first and rest according mediand size difference
-    seqvec.sort_by(|a, b| ((a.len() as f32 - median_size).abs()).partial_cmp(&(b.len() as f32 - median_size).abs()).unwrap());
-    seqvec
 }
