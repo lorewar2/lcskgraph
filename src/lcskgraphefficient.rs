@@ -704,6 +704,7 @@ pub fn find_kmer_matches_seq1_hashed(
             }
         }
     }
-    matches.sort_unstable();
+    // no need to sort, as sorted later, test
+    //matches.sort_unstable();
     matches
 }

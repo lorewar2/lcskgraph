@@ -18,6 +18,7 @@ const BAND_SIZE: usize = 300;
 
 fn main() {
    run_pacbio_data();
+   //run_synthetic_data();
 }
 
 fn run_pacbio_data() {
@@ -66,156 +67,92 @@ fn run_pacbio_data() {
         new_read_set.push(temp_reads);
 
     }
-
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("index {}", index);
         let mut string_vec = reads.clone();
-        let x = string_vec[0].as_bytes().to_vec();
-        let y = string_vec.pop().unwrap().as_bytes().to_vec();
-
-        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-        for index in 1..string_vec.len() {
-            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-        }
-        
-        let output_graph = aligner.graph();
-        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-        let mut all_paths: Vec<Vec<usize>> = vec![];
-        let mut all_sequences: Vec<Vec<u8>> = vec![];
-
-        // get topology ordering
-        let mut topo = Topo::new(&output_graph);
-        // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
-        let mut topo_indices = vec![];
-        let mut topo_map = HashMap::new();
-        let mut incrementing_index: usize = 0;
-        while let Some(node) = topo.next(&output_graph) {
-            topo_indices.push(node.index());
-            topo_map.insert(node.index(), incrementing_index);
-            incrementing_index += 1;
-        }
-        let now = Instant::now();
-
-        //println!("Finding graph IDs");
-        //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        for sequence in string_vec.clone() {
-            //println!("{:?}", sequence);
-            let mut error_index = 0;
-            loop {
-                let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
-                if error_index > 10 {
-                    //println!("WHAT {} {:?}", sequence, temp_path);
-                    break;
-                }
-                if !error_occured {
-                    //println!("{:?}", temp_path);
-                    all_paths.push(temp_path);
-                    all_sequences.push(temp_sequence);
-                    break;
-                }
-                error_index += 1;
-                
-            }
-        }
-        //println!("Finding kmers");
-        let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
-        //println!("LCSKgraph");
-        //println!("{:?}", kmer_pos_vec);
-        let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
-        
-        //let output_graph = aligner.graph();
-        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-        println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
-        let elapsed = now.elapsed();
-        println!("Elapsed: {:.2?}", elapsed);
-        // second try
-        
-        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-        for index in 1..string_vec.len() {
-            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-        }
-        let now = Instant::now();
-        println!("score {}", aligner.semiglobal(&y).alignment().score);
-        let elapsed = now.elapsed();
-        println!("Elapsed: {:.2?}", elapsed);
+        lcsk_test_pipeline(string_vec);
     }
 }
 
 fn run_synthetic_data() {
-    for seed in 0..NUM_OF_ITER
-    {
+    for seed in 0..NUM_OF_ITER {
         println!("seed {}", seed);
         let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
-        let x = string_vec[0].as_bytes().to_vec();
-        let y = string_vec.pop().unwrap().as_bytes().to_vec();
-        
-        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-        for index in 1..string_vec.len() {
-            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-        }
-        
-        let output_graph = aligner.graph();
-        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-        let mut all_paths: Vec<Vec<usize>> = vec![];
-        let mut all_sequences: Vec<Vec<u8>> = vec![];
-
-        // get topology ordering
-        let mut topo = Topo::new(&output_graph);
-        // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
-        let mut topo_indices = vec![];
-        let mut topo_map = HashMap::new();
-        let mut incrementing_index: usize = 0;
-        while let Some(node) = topo.next(&output_graph) {
-            topo_indices.push(node.index());
-            topo_map.insert(node.index(), incrementing_index);
-            incrementing_index += 1;
-        }
-        let now = Instant::now();
-
-        //println!("Finding graph IDs");
-        //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-        for sequence in string_vec.clone() {
-            //println!("{:?}", sequence);
-            let mut error_index = 0;
-            loop {
-                let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
-                if error_index > 10 {
-                    //println!("WHAT {} {:?}", sequence, temp_path);
-                    break;
-                }
-                if !error_occured {
-                    //println!("{:?}", temp_path);
-                    all_paths.push(temp_path);
-                    all_sequences.push(temp_sequence);
-                    break;
-                }
-                error_index += 1;
-                
-            }
-        }
-        //println!("Finding kmers");
-        let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
-        //println!("LCSKgraph");
-        //println!("{:?}", kmer_pos_vec);
-        let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
-        
-        //let output_graph = aligner.graph();
-        //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-        println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
-        let elapsed = now.elapsed();
-        println!("Elapsed: {:.2?}", elapsed);
-        // second try
-        
-        let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-        for index in 1..string_vec.len() {
-            aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-        }
-        let now = Instant::now();
-        println!("score {}", aligner.semiglobal(&y).alignment().score);
-        let elapsed = now.elapsed();
-        println!("Elapsed: {:.2?}", elapsed);
+        lcsk_test_pipeline(string_vec);
     }
     //io::stdin().read_line(&mut String::new()).unwrap();
+}
+
+fn lcsk_test_pipeline(reads: Vec<String>) {
+    let mut string_vec = reads.clone();
+    let x = string_vec[0].as_bytes().to_vec();
+    let y = string_vec.pop().unwrap().as_bytes().to_vec();
+
+    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+    for index in 1..string_vec.len() {
+        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+    }
+    
+    let output_graph = aligner.graph();
+    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    let mut all_paths: Vec<Vec<usize>> = vec![];
+    let mut all_sequences: Vec<Vec<u8>> = vec![];
+
+    // get topology ordering
+    let mut topo = Topo::new(&output_graph);
+    // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
+    let mut topo_indices = vec![];
+    let mut topo_map = HashMap::new();
+    let mut incrementing_index: usize = 0;
+    while let Some(node) = topo.next(&output_graph) {
+        topo_indices.push(node.index());
+        topo_map.insert(node.index(), incrementing_index);
+        incrementing_index += 1;
+    }
+    let now = Instant::now();
+
+    //println!("Finding graph IDs");
+    //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+    for sequence in string_vec.clone() {
+        //println!("{:?}", sequence);
+        let mut error_index = 0;
+        loop {
+            let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
+            if error_index > 10 {
+                //println!("WHAT {} {:?}", sequence, temp_path);
+                break;
+            }
+            if !error_occured {
+                //println!("{:?}", temp_path);
+                all_paths.push(temp_path);
+                all_sequences.push(temp_sequence);
+                break;
+            }
+            error_index += 1;
+            
+        }
+    }
+    //println!("Finding kmers");
+    let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+    //println!("LCSKgraph");
+    //println!("{:?}", kmer_pos_vec);
+    let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
+    
+    //let output_graph = aligner.graph();
+    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
+    // second try
+    
+    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+    for index in 1..string_vec.len() {
+        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+    }
+    let now = Instant::now();
+    println!("score {}", aligner.semiglobal(&y).alignment().score);
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
 }
 
 fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences: usize, seed: u64) -> Vec<String> {
