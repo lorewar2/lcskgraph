@@ -29,7 +29,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         // IF END SAVE y - K - 1 NODE IF START SAVE y - 1 NODE (-1 if not available)
         // added  graph node and graph node + k
         events.push((x, kmer_graph_index[idx][0], (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
-        events.push((x + k - 1, kmer_graph_index[idx].last(), idx as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
+        events.push((x + k - 1, kmer_graph_index[idx].last().unwrap(), idx as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
         for path in kmer_path_vec[idx].clone() {
             max_ns[path] = max(max_ns[path], x + k - 1);
             max_ns[path] = max(max_ns[path], kmer_graph_index[idx][k as usize - 1]);
@@ -110,7 +110,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
                                 dp[p].0 = prev_score + 1;
                                 dp[p].1 = cont_idx as i32;
                                 dp[p].3 = dp[p].3 + 1;
-                                dp[p].2 = vec![dp[p].2[dp[p].2.len() - 1]];
+                                dp[p].2 = vec![dp[p].2.last().unwrap()];
                             }
                             best_dp = max(best_dp, (dp[p].0, p as i32, path));
                             //println!("candidate location {} {}", ev.0 - k, prev_node);
