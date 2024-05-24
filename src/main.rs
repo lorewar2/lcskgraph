@@ -11,14 +11,14 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 
 //const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
-const KMER: usize = 12;
+const KMER: usize = 4;
 const SEQ_LEN: usize = 100;
 const NUM_OF_ITER: u64 = 10;
 const BAND_SIZE: usize = 300;
 
 fn main() {
-   run_pacbio_data();
-   //run_synthetic_data();
+   //run_pacbio_data();
+   run_synthetic_data();
 }
 
 fn run_pacbio_data() {

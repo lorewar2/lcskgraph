@@ -27,8 +27,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         assert!(y == kmer_graph_index[idx][0]);
         // add the previous one as well
         // IF END SAVE y - K - 1 NODE IF START SAVE y - 1 NODE (-1 if not available)
-        events.push((x, (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
-        events.push((x + k - 1, idx as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
+        // added  graph node and graph node + k
+        events.push((x, kmer_graph_index[idx][0], (idx + kmer_pos_vec.len()) as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
+        events.push((x + k - 1, kmer_graph_index[idx].last(), idx as u32, kmer_path_vec[idx].clone(), kmers_previous_node_in_paths[idx].clone(), kmer_graph_index[idx].clone()));
         for path in kmer_path_vec[idx].clone() {
             max_ns[path] = max(max_ns[path], x + k - 1);
             max_ns[path] = max(max_ns[path], kmer_graph_index[idx][k as usize - 1]);
@@ -66,20 +67,20 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             //tree_update_vec = vec![];
         }
         // p is the match index
-        let p = (ev.1 % kmer_pos_vec.len() as u32) as usize;
+        let p = (ev.2 % kmer_pos_vec.len() as u32) as usize;
         //println!("x:{} y_start:{} y_end:{} p:{} idx:{} paths:{:?}", ev.0, ev.1, ev.2, p, ev.3, ev.4);
         // is start if higher than this
-        let is_start = ev.1 >= (kmer_pos_vec.len() as u32);
+        let is_start = ev.2 >= (kmer_pos_vec.len() as u32);
         if is_start {
             //print!("IS START \n");
             dp[p].0 = k;
             dp[p].1 = -1;
-            dp[p].2 = ev.4;
+            dp[p].2 = ev.5;
             dp[p].3 = ev.0;
             // go through the paths available in this event, and get the max corrosponding value and pos
-            for path_index in 0..ev.2.len() {
-                let path = ev.2[path_index];
-                let prev_node = ev.3[path_index];
+            for path_index in 0..ev.3.len() {
+                let path = ev.3[path_index];
+                let prev_node = ev.4[path_index];
                 if prev_node != u32::MAX {
                     //println!("prev node value = {}", prev_node);
                     let (temp_value, temp_position) = max_bit_tree_path[path].get(prev_node as usize);
@@ -96,9 +97,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             //print!("IS END \n");
             // See if this kmer continues a different kmer
             if ev.0 >= k {
-                for path_index in 0..ev.2.len() {
-                    let path = ev.2[path_index];
-                    let prev_node = ev.3[path_index];
+                for path_index in 0..ev.3.len() {
+                    let path = ev.3[path_index];
+                    let prev_node = ev.4[path_index];
                     if prev_node != u32::MAX {
                         if let Ok(cont_idx) = kmer_pos_vec.binary_search(&(ev.0 - k, prev_node)) {
                             //println!("!!!!!!!!!!");
@@ -123,7 +124,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             //  update required, current x, value,  index, paths (trees)
                 // ev.2 = ev.6[k as usize - 1]
     // ev.1 = ev.6[0]
-            tree_update_vec.push((ev.0, (dp[p].0, p as u32), ev.4[k as usize - 1], ev.2.clone()));
+            tree_update_vec.push((ev.0, (dp[p].0, p as u32), ev.5[k as usize - 1], ev.3.clone()));
             tree_update_required_level = ev.0;
         }
     }
