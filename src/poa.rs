@@ -287,7 +287,7 @@ impl Traceback {
 pub struct Aligner {
     traceback: Traceback,
     query: Vec<u8>,
-    poa: Poa,
+    pub poa: Poa,
 }
 
 impl Aligner{
@@ -515,6 +515,7 @@ pub struct Poa {
     x_clip: i32,
     y_clip: i32,
     pub graph: POAGraph,
+    pub memory_usage: usize,
 }
 
 impl Poa{
@@ -535,8 +536,7 @@ impl Poa{
             graph.add_edge(prev, node, 1);
             prev = node;
         }
-
-        Poa { match_score: match_score, mismatch_score: mismatch_score, gap_open_score: gap_open_score, x_clip: x_clip, y_clip: y_clip, graph}
+        Poa { match_score: match_score, mismatch_score: mismatch_score, gap_open_score: gap_open_score, x_clip: x_clip, y_clip: y_clip, graph, memory_usage: 0}
     }
     /// A global Needleman-Wunsch aligner on partially ordered graphs.
     ///
@@ -668,7 +668,8 @@ impl Poa{
         if max_in_row.1 != n {
             traceback.set(traceback.last.index() + 1, n, maxcell);
         }
-        println!("Total {}KB", (total_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
+        self.memory_usage = (total_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
+        //println!("Total {}KB", (total_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
         traceback
     }
     
@@ -895,7 +896,8 @@ impl Poa{
         if max_in_row.1 != n {
             traceback.set(traceback.last.index() + 1, n, maxcell);
         }
-        println!("Banded {}KB", (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
+        //println!("Banded {}KB", (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
+        self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
         traceback
     }
     /// Incorporate a new sequence into a graph from an alignment

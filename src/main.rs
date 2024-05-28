@@ -22,6 +22,7 @@ fn main() {
 }
 
 fn run_pacbio_data() {
+    println!("Processing Pacbio Data");
     let read_file_dir = "data/sample_pacbio.bam";
     // get data from bam file
     let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
@@ -69,21 +70,48 @@ fn run_pacbio_data() {
     }
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("index {}", index);
-        let mut string_vec = reads.clone();
+        let string_vec = reads.clone();
         lcsk_test_pipeline(string_vec);
     }
-}
-
-fn run_synthetic_data() {
-    for seed in 0..NUM_OF_ITER {
-        println!("seed {}", seed);
-        let string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
-        lcsk_test_pipeline(string_vec);
+    let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
+    let mut poa_stuff_sum = (0, 0, 0);
+    for (index, reads) in new_read_set.iter().enumerate() {
+        let string_vec = reads.clone();
+        let results = lcsk_test_pipeline(string_vec);
+        // print current seed results
+        println!("Read number {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", index, results.1, results.3, results.5, results.0, results.2, results.4);
+        lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
+        poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
     }
+    println!("=======================\nAverage \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", poa_stuff_sum.0 / NUM_OF_ITER as usize, poa_stuff_sum.1 / NUM_OF_ITER as usize, poa_stuff_sum.2/ NUM_OF_ITER as usize, lcsk_stuff_sum.0/ NUM_OF_ITER as usize, lcsk_stuff_sum.1/ NUM_OF_ITER as usize, lcsk_stuff_sum.2/ NUM_OF_ITER as usize);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
 
-fn lcsk_test_pipeline(reads: Vec<String>) {
+fn run_synthetic_data() {
+    println!("Processing Synthetic Data");
+    let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
+    let mut poa_stuff_sum = (0, 0, 0);
+    for seed in 0..NUM_OF_ITER {
+        let string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
+        let results = lcsk_test_pipeline(string_vec);
+        // print current seed results
+        println!("Seed {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", seed, results.1, results.3, results.5, results.0, results.2, results.4);
+        lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
+        poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
+    }
+    println!("=======================\nAverage \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", poa_stuff_sum.0 / NUM_OF_ITER as usize, poa_stuff_sum.1 / NUM_OF_ITER as usize, poa_stuff_sum.2/ NUM_OF_ITER as usize, lcsk_stuff_sum.0/ NUM_OF_ITER as usize, lcsk_stuff_sum.1/ NUM_OF_ITER as usize, lcsk_stuff_sum.2/ NUM_OF_ITER as usize);
+    //io::stdin().read_line(&mut String::new()).unwrap();
+}
+
+fn lcsk_test_pipeline(reads: Vec<String>) -> (usize, usize, usize, usize, usize, usize){
+    //for evaluating varibles
+    let lcsk_poa_score;
+    let normal_poa_score;
+    let lcsk_poa_time;
+    let normal_poa_time;
+    let lcsk_poa_memory;
+    let normal_poa_memory;
+
     let mut string_vec = reads.clone();
     let x = string_vec[0].as_bytes().to_vec();
     let y = string_vec.pop().unwrap().as_bytes().to_vec();
@@ -109,7 +137,7 @@ fn lcsk_test_pipeline(reads: Vec<String>) {
         topo_map.insert(node.index(), incrementing_index);
         incrementing_index += 1;
     }
-    let now = Instant::now();
+    
 
     //println!("Finding graph IDs");
     //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
@@ -132,6 +160,7 @@ fn lcsk_test_pipeline(reads: Vec<String>) {
             
         }
     }
+    let now = Instant::now();
     //println!("Finding kmers");
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
     //println!("LCSKgraph");
@@ -140,19 +169,25 @@ fn lcsk_test_pipeline(reads: Vec<String>) {
     
     //let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-    println!("score {}", aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score);
+    lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score as usize;
     let elapsed = now.elapsed();
-    println!("Elapsed: {:.2?}", elapsed);
-    // second try
-    
+    lcsk_poa_memory = aligner.poa.memory_usage as usize;
+    lcsk_poa_time = elapsed.as_micros() as usize;
+    //println!("Elapsed: {:.2?}", elapsed);
+    //println!("score {}", lcsk_poa_score);
+   // second try   
     let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
     }
     let now = Instant::now();
-    println!("score {}", aligner.semiglobal(&y).alignment().score);
+    normal_poa_score = aligner.semiglobal(&y).alignment().score as usize;
     let elapsed = now.elapsed();
-    println!("Elapsed: {:.2?}", elapsed);
+    normal_poa_memory = aligner.poa.memory_usage as usize;
+    //println!("score {}", normal_poa_score);
+    normal_poa_time = elapsed.as_micros() as usize;
+    //println!("Elapsed: {:.2?}", elapsed);
+    return (lcsk_poa_score, normal_poa_score, lcsk_poa_time, normal_poa_time, lcsk_poa_memory, normal_poa_memory)
 }
 
 fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences: usize, seed: u64) -> Vec<String> {
