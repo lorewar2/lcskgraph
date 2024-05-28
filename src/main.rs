@@ -2,7 +2,7 @@ mod poa;
 mod lcskgraphefficient;
 mod lcskgraphdp;
 mod bit_tree;
-use std::{collections::HashMap, thread::current};
+use std::{collections::HashMap};
 use poa::*;
 use petgraph::visit::Topo;
 use crate::lcskgraphefficient::{find_sequence_in_graph, better_find_kmer_matches, lcskpp_graph};
@@ -14,7 +14,7 @@ use rust_htslib::{bam, bam::Read};
 const KMER: usize = 4;
 const SEQ_LEN: usize = 100;
 const NUM_OF_ITER: u64 = 10;
-const BAND_SIZE: usize = 300;
+const BAND_SIZE: usize = 10;
 
 fn main() {
    //run_pacbio_data();
@@ -77,7 +77,7 @@ fn run_pacbio_data() {
 fn run_synthetic_data() {
     for seed in 0..NUM_OF_ITER {
         println!("seed {}", seed);
-        let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
+        let string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
         lcsk_test_pipeline(string_vec);
     }
     //io::stdin().read_line(&mut String::new()).unwrap();

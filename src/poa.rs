@@ -784,6 +784,9 @@ impl Poa{
                 }
             }
             //start = 0;
+            if end > n {
+                end = n;
+            }
             //end = n;
             traceback.new_row(
                 i,
