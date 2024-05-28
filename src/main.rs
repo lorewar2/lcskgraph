@@ -9,6 +9,7 @@ use crate::lcskgraphefficient::{find_sequence_in_graph, better_find_kmer_matches
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
+use std::env;
 
 //const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
 const KMER: usize = 4;
@@ -17,8 +18,58 @@ const NUM_OF_ITER: u64 = 10;
 const BAND_SIZE: usize = 10;
 
 fn main() {
+    // get the arguments 1. num of threads 2. read bam
+    // s for synthetic test p for pacbio test s for subread processing
+    // kmer size band size 
+    let mut kmer_size: usize = 10;
+    let mut band_size: usize = 200;
+    let mut sequence_length: usize = 10000;
+    let mut bam_path: String = "".to_string();
+
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match &arg[..] {
+            "-h" | "--help" => help(),
+            "--version" => {
+                println!("{} {}", "LCSKGRAPH++", "1.0.0");
+            }
+            "-v" | "--verbose" => {
+                println!("Verbose mode is not supported yet.");
+            }
+            "-c" | "--config" => {
+                if let Some(arg_config) = args.next() {
+                    //config = arg_config;
+                } else {
+                    panic!("No value specified for parameter --config.");
+                }
+            }
+            _ => {
+                if arg.starts_with('-') {
+                    println!("Unkown argument {}", arg);
+                } else {
+                    println!("Unkown positional argument {}", arg);
+                }
+            }
+        }
+    }
    //run_pacbio_data();
-   run_synthetic_data();
+   //run_synthetic_data();
+}
+
+fn help() {
+    println!("Usage: lcskgraph [OPTIONS]");
+    println!("Options:\n -h, --help\tPrint help");
+    println!("\n--version\tPrint version information");
+    println!("\n-t <0,1,2>\tk for lcsk");
+    println!("\n-k <N>\tk for lcsk");
+    println!("\n-b <N>\tBand size for POA");
+    println!("\n-l <N>\tSequence length for synthetic data");
+    println!("\n-i <N>\tThe sequence length for synthetic data");
+    println!("\n-f <PATH>\tSpecify the path for pacbio subread bam file");
+}
+
+fn make_read_file_from_subread_bam () {
+
 }
 
 fn run_pacbio_data() {
@@ -29,7 +80,11 @@ fn run_pacbio_data() {
     let mut read_set = vec![];
     let mut current_set = "".to_string();
     let mut temp_read = vec![];
-    for record_option in bam.records().into_iter() {                                                                            match record_option {                                                                                                       Ok(x) => {                                                                                                                  let record = x;                                                                                                         let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
+    for record_option in bam.records().into_iter() {
+        match record_option {                                                                                                       
+            Ok(x) => {                                                                                                       
+                let record = x;                                                                                                         
+                let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
                 if current_set == "".to_string() {
                     println!("Start here");
                     current_set = record_set;
