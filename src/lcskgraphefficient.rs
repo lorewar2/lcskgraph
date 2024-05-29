@@ -40,9 +40,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     // sorting is okay with topologically converted indices
     events.sort_unstable();
     //println!("{:?}", kmer_pos_vec);
-    for event in &events {
+    //for event in &events {
         //println!("{:?}", event);
-    }
+    //}
     //println!("DONE");
     let mut max_bit_tree_path = vec![];
     // generate empty fenwick trees
@@ -129,7 +129,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         }
     }
     let mut traceback = Vec::new();
-    let (best_score, mut prev_match, mut path) = best_dp;
+    let (best_score, mut prev_match, mut _path) = best_dp;
     //println!("BEST SCORE: {} PREV_MATCH: {}", best_score, prev_match);
     //println!("PATHS");
     
@@ -237,7 +237,7 @@ pub fn find_sequence_in_graph (sequence: Vec<u8>, graph: &POAGraph, topo_indices
     let mut error_occured = false;
     // find the first match to index 0 of sequence, if there is error in processing choose the next topo skipping error one
     let mut current_error_index = 0;
-    for (index, topo_index) in topo_indices.iter().enumerate() {
+    for (_index, topo_index) in topo_indices.iter().enumerate() {
         if graph.raw_nodes()[*topo_index].weight == sequence[current_index] {
             current_node = *topo_index;
             //println!("did break at index {}", index);
@@ -349,7 +349,7 @@ pub fn lcskpp_graph_for_divided (
     let mut events: Vec<(u32, u32, u32, u32, Vec<(usize, usize)>, Vec<u32>)> = Vec::new(); // x, y_start, y_end, idx, (section, section_path), prev nodes
     let mut max_ns = vec![0; max_num_paths_per_section];
     // generate the required events
-    for (idx, &(x, y, section)) in kmer_pos_vec.iter().enumerate() {
+    for (idx, &(x, y, _section)) in kmer_pos_vec.iter().enumerate() {
         let y_plus_k = kmers_plus_k[idx];
         // add the previous one as well
         // IF END SAVE y - K - 1 NODE IF START SAVE y - 1 NODE (-1 if not available)

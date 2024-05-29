@@ -292,7 +292,7 @@ pub struct Aligner {
 
 impl Aligner{
     /// Create new instance.
-    pub fn new(match_score: i32, mismatch_score: i32, gap_open_score: i32, reference: &Vec<u8>, x_clip: i32, y_clip: i32, band_size: i32) -> Self {
+    pub fn new(match_score: i32, mismatch_score: i32, gap_open_score: i32, reference: &Vec<u8>, x_clip: i32, y_clip: i32, _band_size: i32) -> Self {
         Aligner {
             traceback: Traceback::new(),
             query: reference.to_vec(),

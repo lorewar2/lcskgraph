@@ -1,8 +1,8 @@
+#![allow(dead_code)]
 mod poa;
 mod lcskgraphefficient;
-mod lcskgraphdp;
 mod bit_tree;
-use std::{collections::HashMap};
+use std::{collections::HashMap, process::exit};
 use poa::*;
 use petgraph::visit::Topo;
 use crate::lcskgraphefficient::{find_sequence_in_graph, better_find_kmer_matches, lcskpp_graph};
@@ -11,70 +11,144 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 use std::env;
 
-//const CUT_THRESHOLD: usize = 5; //cut when number of nodes exceed this threshold
-const KMER: usize = 4;
-const SEQ_LEN: usize = 100;
-const NUM_OF_ITER: u64 = 10;
-const BAND_SIZE: usize = 10;
-
 fn main() {
     // get the arguments 1. num of threads 2. read bam
     // s for synthetic test p for pacbio test s for subread processing
     // kmer size band size 
+    let mut synthetic_data = false;
+    let mut benchmarking = false; // only valid for pacbio data
     let mut kmer_size: usize = 10;
     let mut band_size: usize = 200;
     let mut sequence_length: usize = 10000;
-    let mut bam_path: String = "".to_string();
+    let mut number_of_iter: usize = 0; // required for benchmarking
+    let mut input_bam_path: String = "data/sample_pacbio.bam".to_string();
+    let mut output_bam_path: String = "output/read_pacbio.bam".to_string();
 
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match &arg[..] {
             "-h" | "--help" => help(),
             "--version" => {
-                println!("{} {}", "LCSKGRAPH++", "1.0.0");
+                println!("LCSKGRAPH++ 1.0.0");
             }
-            "-v" | "--verbose" => {
-                println!("Verbose mode is not supported yet.");
+            "-s" => {
+                println!("Synthetic data mode");
+                synthetic_data = true;
             }
-            "-c" | "--config" => {
-                if let Some(arg_config) = args.next() {
-                    //config = arg_config;
+            "-p" => {
+                println!("Pacbio data mode");
+                synthetic_data = false;
+                if let Some(in_string) = args.next() {
+                    input_bam_path = in_string;
                 } else {
-                    panic!("No value specified for parameter --config.");
+                    panic!("No input bam file specified!");
+                }
+                if let Some(out_string) = args.next() {
+                    output_bam_path = out_string;
+                } else {
+                    panic!("No output bam file specified!");
+                }
+            }
+            "-t" => {
+                println!("Benchmarking..");
+                benchmarking = true;
+                if let Some(i_string) = args.next() {
+                    number_of_iter = match i_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -i")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -i");
+                }
+            }
+            "-k" => {
+                if let Some(k_string) = args.next() {
+                    kmer_size = match k_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -k")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -k.");
+                }
+            }
+            "-b" => {
+                if let Some(b_string) = args.next() {
+                    band_size = match b_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -b")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -b");
+                }
+            }
+            "-l" => {
+                if let Some(l_string) = args.next() {
+                    sequence_length = match l_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -l")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -l");
                 }
             }
             _ => {
                 if arg.starts_with('-') {
-                    println!("Unkown argument {}", arg);
+                    println!("Unknown argument {}", arg);
                 } else {
-                    println!("Unkown positional argument {}", arg);
+                    println!("Unknown positional argument {}", arg);
                 }
             }
         }
     }
-   //run_pacbio_data();
-   //run_synthetic_data();
+    // check for synthetic and run
+    if synthetic_data == true {
+        if number_of_iter == 0 {
+            panic!("Number of iterations can't be 0 for synthetic data benchmarking!");
+        }
+        if benchmarking == false {
+            panic!("Synthetic data can only be run in benchmarking mode!");
+        }
+        println!("Benchmarking Synthetic data for {} iterations, sequences of length: {} using k: {} band size: {}", number_of_iter, sequence_length, kmer_size, band_size);
+        run_synthetic_data_benchmark(kmer_size, sequence_length, number_of_iter, band_size);
+    }
+    // check for pacbio and run
+    if synthetic_data == false {
+        if benchmarking == true {
+            if number_of_iter == 0 {
+                panic!("Number of iterations can't be 0 for pacbio data benchmarking!");
+            }
+            println!("Benchmarking Pacbio data {} for {} iterations, using k: {} band size: {}", input_bam_path, number_of_iter, kmer_size, band_size);
+            run_pacbio_data_benchmark(kmer_size, number_of_iter, band_size, input_bam_path);
+        }
+        else {
+            make_read_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
+            println!("SS");
+        }
+    }
 }
 
 fn help() {
     println!("Usage: lcskgraph [OPTIONS]");
     println!("Options:\n -h, --help\tPrint help");
-    println!("\n--version\tPrint version information");
-    println!("\n-t <0,1,2>\tk for lcsk");
-    println!("\n-k <N>\tk for lcsk");
-    println!("\n-b <N>\tBand size for POA");
-    println!("\n-l <N>\tSequence length for synthetic data");
-    println!("\n-i <N>\tThe sequence length for synthetic data");
-    println!("\n-f <PATH>\tSpecify the path for pacbio subread bam file");
+    println!(" --version\tPrint version information");
+    println!(" -s \t\tSynthetic data, no output");
+    println!(" -p <IN> <OUT>\tPacbio data, input subread bam file path, output bam file path");
+    println!(" -t <N>\t\tBenchmarking, Number of iterations, default 10");
+    println!(" -k <N>\t\tk for lcsk, default 10");
+    println!(" -b <N>\t\tBand size for POA, default 200");
+    println!(" -l <N>\t\tSequence length for synthetic data, default 10,000");
+    println!(" -i <N>\t\tNumber of iterations for synthetic data or pacbio, default 0");
+    // exit the program
+    exit(0x0100);
 }
 
-fn make_read_file_from_subread_bam () {
+fn make_read_file_from_subread_bam (_kmer_size: usize, _band_size: usize, _input_path: String, _output_path: String) {
 
 }
 
-fn run_pacbio_data() {
-    println!("Processing Pacbio Data");
-    let read_file_dir = "data/sample_pacbio.bam";
+fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: usize, input_path: String) {
+    //println!("Processing Pacbio Data");
+    let read_file_dir = input_path;
     // get data from bam file
     let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
     let mut read_set = vec![];
@@ -86,23 +160,22 @@ fn run_pacbio_data() {
                 let record = x;                                                                                                         
                 let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
                 if current_set == "".to_string() {
-                    println!("Start here");
+                    //println!("Start here");
                     current_set = record_set;
                     temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
-                    println!()
+                    //println!()
                 }
                 else if current_set == record_set {
-
-                    println!("Just adding read");
+                    //println!("Just adding read");
                     temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
                 }
                 else {
-                    println!("Read set complete onto the next");
+                    //println!("Read set complete onto the next");
                     current_set = record_set;
                     read_set.push(temp_read);
                     temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
-                    if read_set.len() >= 10 {
-                        println!("Got 10 sets exiting!");
+                    if read_set.len() >= num_of_iter {
+                        println!("Got {} sets exiting!", num_of_iter);
                         break;
                     }
                 }
@@ -119,46 +192,43 @@ fn run_pacbio_data() {
         temp_reads.push(reads[0].clone());
         temp_reads.push(reads[2].clone());
         temp_reads.push(reads[4].clone());
-        println!("{:?}", temp_reads.len());
+        //println!("{:?}", temp_reads.len());
         new_read_set.push(temp_reads);
 
     }
-    for (index, reads) in new_read_set.iter().enumerate() {
-        println!("index {}", index);
-        let string_vec = reads.clone();
-        lcsk_test_pipeline(string_vec);
-    }
     let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
     let mut poa_stuff_sum = (0, 0, 0);
     for (index, reads) in new_read_set.iter().enumerate() {
+        println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
-        let results = lcsk_test_pipeline(string_vec);
+        let results = lcsk_test_pipeline(string_vec, kmer_size, band_size);
         // print current seed results
-        println!("Read number {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", index, results.1, results.3, results.5, results.0, results.2, results.4);
+        //println!("Read number {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", index, results.1, results.3, results.5, results.0, results.2, results.4);
         lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
         poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
     }
-    println!("=======================\nAverage \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", poa_stuff_sum.0 / NUM_OF_ITER as usize, poa_stuff_sum.1 / NUM_OF_ITER as usize, poa_stuff_sum.2/ NUM_OF_ITER as usize, lcsk_stuff_sum.0/ NUM_OF_ITER as usize, lcsk_stuff_sum.1/ NUM_OF_ITER as usize, lcsk_stuff_sum.2/ NUM_OF_ITER as usize);
+    println!("=======================\nSummary Average of {} runs \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", num_of_iter, poa_stuff_sum.0 / num_of_iter, poa_stuff_sum.1 / num_of_iter, poa_stuff_sum.2/ num_of_iter, lcsk_stuff_sum.0/ num_of_iter, lcsk_stuff_sum.1/ num_of_iter, lcsk_stuff_sum.2/ num_of_iter);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
 
-fn run_synthetic_data() {
+fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_of_iter: usize, band_size: usize) {
     println!("Processing Synthetic Data");
     let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
     let mut poa_stuff_sum = (0, 0, 0);
-    for seed in 0..NUM_OF_ITER {
-        let string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
-        let results = lcsk_test_pipeline(string_vec);
+    for seed in 0..num_of_iter {
+        println!("Progress {:.2}%", ((seed * 100) as f32 / num_of_iter as f32));
+        let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
+        let results = lcsk_test_pipeline(string_vec, kmer_size, band_size);
         // print current seed results
-        println!("Seed {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", seed, results.1, results.3, results.5, results.0, results.2, results.4);
+        //println!("Seed {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", seed, results.1, results.3, results.5, results.0, results.2, results.4);
         lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
         poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
     }
-    println!("=======================\nAverage \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", poa_stuff_sum.0 / NUM_OF_ITER as usize, poa_stuff_sum.1 / NUM_OF_ITER as usize, poa_stuff_sum.2/ NUM_OF_ITER as usize, lcsk_stuff_sum.0/ NUM_OF_ITER as usize, lcsk_stuff_sum.1/ NUM_OF_ITER as usize, lcsk_stuff_sum.2/ NUM_OF_ITER as usize);
+    println!("=======================\nSummary Average of {} runs \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", num_of_iter, poa_stuff_sum.0 / num_of_iter, poa_stuff_sum.1 / num_of_iter, poa_stuff_sum.2/ num_of_iter, lcsk_stuff_sum.0/ num_of_iter, lcsk_stuff_sum.1/ num_of_iter, lcsk_stuff_sum.2/ num_of_iter);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
 
-fn lcsk_test_pipeline(reads: Vec<String>) -> (usize, usize, usize, usize, usize, usize){
+fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) -> (usize, usize, usize, usize, usize, usize){
     //for evaluating varibles
     let lcsk_poa_score;
     let normal_poa_score;
@@ -171,7 +241,7 @@ fn lcsk_test_pipeline(reads: Vec<String>) -> (usize, usize, usize, usize, usize,
     let x = string_vec[0].as_bytes().to_vec();
     let y = string_vec.pop().unwrap().as_bytes().to_vec();
 
-    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
+    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, band_size as i32);
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
     }
@@ -217,14 +287,14 @@ fn lcsk_test_pipeline(reads: Vec<String>) -> (usize, usize, usize, usize, usize,
     }
     let now = Instant::now();
     //println!("Finding kmers");
-    let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER);
+    let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
     //println!("LCSKgraph");
     //println!("{:?}", kmer_pos_vec);
-    let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER, kmer_graph_path, &topo_indices);
+    let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
     
     //let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-    lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, BAND_SIZE).alignment().score as usize;
+    lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
     let elapsed = now.elapsed();
     lcsk_poa_memory = aligner.poa.memory_usage as usize;
     lcsk_poa_time = elapsed.as_micros() as usize;
@@ -245,8 +315,8 @@ fn lcsk_test_pipeline(reads: Vec<String>) -> (usize, usize, usize, usize, usize,
     return (lcsk_poa_score, normal_poa_score, lcsk_poa_time, normal_poa_time, lcsk_poa_memory, normal_poa_memory)
 }
 
-fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences: usize, seed: u64) -> Vec<String> {
-    let mut rng = StdRng::seed_from_u64(seed);
+fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences: usize, seed: usize) -> Vec<String> {
+    let mut rng = StdRng::seed_from_u64(seed as u64);
     //vector to save all the sequences 
     let mut randomvec: Vec<String> = vec![];
     //generate the first sequence of random bases of length sequence_length
@@ -305,7 +375,7 @@ fn get_random_sequences_from_generator(sequence_length: usize, num_of_sequences:
                 _ => {}
             }
         }
-        println!("{:?}", mutseq.iter().collect::<String>());
+        //println!("{:?}", mutseq.iter().collect::<String>());
         //insert to vector
         randomvec.push(mutseq.iter().collect::<String>());
     }
