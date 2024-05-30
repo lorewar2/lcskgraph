@@ -203,7 +203,7 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
         let string_vec = reads.clone();
         let results = lcsk_test_pipeline(string_vec, kmer_size, band_size);
         // print current seed results
-        println!("Read number {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", index, results.1, results.3, results.5, results.0, results.2, results.4);
+        println!("Read number {}\nNormal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB\nLcsk poa \tScore: {} \tTime: {}meus \tMemory usage: {}KB", index, results.1, results.3, results.5, results.0, results.2, results.4);
         lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
         poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
     }
@@ -220,7 +220,7 @@ fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_o
         let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
         let results = lcsk_test_pipeline(string_vec, kmer_size, band_size);
         // print current seed results
-        println!("Seed {}\nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n", seed, results.1, results.3, results.5, results.0, results.2, results.4);
+        println!("Seed {}\nNormal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB\nLcsk poa \tScore: {} \tTime: {}meus \tMemory usage: {}KB", seed, results.1, results.3, results.5, results.0, results.2, results.4);
         lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
         poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
     }
