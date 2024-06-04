@@ -11,21 +11,23 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 use std::env;
 
-const KMER_SIZE: usize = 50;
-const SEQ_LEN: usize = 1000;
+const KMER_SIZE: usize = 10;
+const SEQ_LEN: usize = 10000;
 const BAND_SIZE: usize = 100;
+const SUB_SECTION_LEN: usize = 1000;
+const MIDDLE_SECTION_LEN: usize = 3162;
 
 fn main() {
     //arg_runner();
-    test_runner();
+    for seed in 0..100 {
+        println!("RUNNING");
+        test_runner(seed);
+        lcsk_only_start(seed);
+    }
 }
 
-fn test_runner() {
-    // window size and filtering
-
-    // just use the start and end of the sequences windowed processing and see
-
-    let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, 1);
+fn lcsk_only_start (seed: usize) {
+    let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
     let x = string_vec[0].as_bytes().to_vec();
     let y = string_vec.pop().unwrap().as_bytes().to_vec();
 
@@ -33,7 +35,7 @@ fn test_runner() {
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
     }
-    
+    println!("THIS");
     let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     let mut all_paths: Vec<Vec<usize>> = vec![];
@@ -50,8 +52,6 @@ fn test_runner() {
         topo_map.insert(node.index(), incrementing_index);
         incrementing_index += 1;
     }
-    
-
     //println!("Finding graph IDs");
     //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
     for sequence in string_vec.clone() {
@@ -70,15 +70,131 @@ fn test_runner() {
                 break;
             }
             error_index += 1;
-            
         }
     }
     let now = Instant::now();
+    // find the kmers in top section 
     //println!("Finding kmers");
+
+    // find matches in top section (full horizontal query, subsection length verticle graph)
+    let (top_path, top_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, SEQ_LEN, SUB_SECTION_LEN);
+
+    // find matches in left section (full verticle graph, subsection length query)
+    let (left_path, left_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, SUB_SECTION_LEN, SUB_SECTION_LEN);
+    // find matches in middle section (middle section length graph, middle section length query)
+    let (middle_path, middle_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, MIDDLE_SECTION_LEN, MIDDLE_SECTION_LEN);
+    // get the scores from all three and use the one with highest score
+    println!("top {} {:?}", top_score, top_path[0]);
+    println!("left{} {:?}", left_score, left_path[0]);
+    println!("middle{} {:?}", middle_score, middle_path[0]);
+
+    // and only use the start of kmer
+    //let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER_SIZE);
+    //println!("LCSKgraph");
+    //println!("{:?}", kmer_pos_vec);
+    //let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER_SIZE, kmer_graph_path, &topo_indices);
+    //println!("new with multi window {:?}", lcsk_path[0]);
+    let elapsed = now.elapsed();
+    println!("new TIME TAKEN {:?}", elapsed);
+}
+
+fn get_lcsk_path_from_section (query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize, topo_map: &Vec<usize>, required_query_len: usize, required_graph_len: usize) -> (Vec<(usize, usize)>, u32){
+    // cut the query
+    let new_query;
+    if required_query_len < query.len() {
+        new_query = query[0..required_query_len].to_vec();
+    }
+    else {
+        new_query = query.to_vec();
+    }
+    // cut the sequences and paths
+    let mut new_sequences = vec![];
+    let mut new_graph_ids = vec![];
+    for (index, sequence) in graph_sequences.iter().enumerate() {
+        let new_graph_sequence;
+        let new_graph_id;
+        if required_graph_len < sequence.len() {
+            new_graph_sequence = sequence[0..required_graph_len].to_vec();
+            new_graph_id = graph_ids[index][0..required_graph_len].to_vec();
+        }
+        else {
+            new_graph_sequence = sequence.to_vec();
+            new_graph_id = graph_ids[index].to_vec();
+        }
+        new_sequences.push(new_graph_sequence);
+        new_graph_ids.push(new_graph_id);
+    }
+    // get the results
+    let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&new_query, &new_sequences, &new_graph_ids, KMER_SIZE);
+
+    let (lcsk_path, k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, new_sequences.len(), KMER_SIZE, kmer_graph_path, &topo_map);
+
+    return (lcsk_path, k_new_score);
+}
+
+fn test_runner(seed: usize) {
+    // window size and filtering
+
+    // just use the start and end of the sequences windowed processing and see
+
+    let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
+    let x = string_vec[0].as_bytes().to_vec();
+    let y = string_vec.pop().unwrap().as_bytes().to_vec();
+
+    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, BAND_SIZE as i32);
+    for index in 1..string_vec.len() {
+        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+    }
+    println!("THIS");
+    let output_graph = aligner.graph();
+    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    let mut all_paths: Vec<Vec<usize>> = vec![];
+    let mut all_sequences: Vec<Vec<u8>> = vec![];
+
+    // get topology ordering
+    let mut topo = Topo::new(&output_graph);
+    // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
+    let mut topo_indices = vec![];
+    let mut topo_map = HashMap::new();
+    let mut incrementing_index: usize = 0;
+    while let Some(node) = topo.next(&output_graph) {
+        topo_indices.push(node.index());
+        topo_map.insert(node.index(), incrementing_index);
+        incrementing_index += 1;
+    }
+    
+
+    println!("Finding graph IDs");
+    //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+    for sequence in string_vec.clone() {
+        //println!("{:?}", sequence);
+        let mut error_index = 0;
+        loop {
+            let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
+            if error_index > 10 {
+                //println!("WHAT {} {:?}", sequence, temp_path);
+                break;
+            }
+            if !error_occured {
+                //println!("{:?}", temp_path);
+                all_paths.push(temp_path);
+                all_sequences.push(temp_sequence);
+                break;
+            }
+            error_index += 1;
+        }
+    }
+    let now = Instant::now();
+    println!("Finding kmers");
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER_SIZE);
     //println!("LCSKgraph");
     //println!("{:?}", kmer_pos_vec);
     let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER_SIZE, kmer_graph_path, &topo_indices);
+    println!("old with one window {:?}", lcsk_path[0]);
+    aligner.semiglobal_banded(&y, &lcsk_path, 10000).alignment().score as usize;
+    let lcsk_poa_memory = aligner.poa.memory_usage as usize;
+    let elapsed = now.elapsed();
+    println!("old TIME TAKEN {:?} {}", elapsed, lcsk_poa_memory);
 }
 
 fn arg_runner() {

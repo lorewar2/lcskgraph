@@ -900,6 +900,204 @@ impl Poa{
         self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
         traceback
     }
+
+    pub fn custom_banded_first_part(&mut self, query: &Vec<u8>, lcsk_path_first_part: &Vec<(usize, usize)>, bandwidth: usize) -> Traceback {
+        assert!(self.graph.node_count() != 0);
+        // dimensions of the traceback matrix
+        let (m, n) = (self.graph.node_count(), query.len());
+        // save score location of the max scoring node for the query for suffix clipping
+        let mut max_in_column = vec![(0, 0); n + 1];
+        let mut traceback = Traceback::with_capacity(m, n);
+        traceback.initialize_scores(self.gap_open_score, self.y_clip);
+        // construct the score matrix (O(n^2) space)
+        let mut topo = Topo::new(&self.graph);
+        let mut no_kmers = false;
+        if lcsk_path_first_part.len() == 0 {
+            no_kmers = true;
+        }
+        
+        let mut start_banding_query_node = (0, 0);
+        let mut end_banding_query_node = &(0, 0);
+        let mut banding_started = false;
+        let mut banding_ended = false;
+        let mut current_lcsk_path_index = 0;
+        let mut banded_cell_usage = 0;
+        if !no_kmers {
+            start_banding_query_node = lcsk_path_first_part[0];
+            end_banding_query_node = lcsk_path_first_part.last().unwrap();
+        }
+        
+        while let Some(node) = topo.next(&self.graph) {
+            // reference base and index
+            let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
+            let i = node.index() + 1; // 0 index is for initialization so we start at 1
+            traceback.last = node;
+            // iterate over the predecessors of this node
+            let prevs: Vec<NodeIndex<usize>> =
+                self.graph.neighbors_directed(node, Incoming).collect();
+            // banding stuff do here
+            let mut start = 0;
+            let mut end = n;
+            if !no_kmers {
+                if banding_started == false {
+                    //do banding till start_banding_query_node + bandwidth
+                    end = start_banding_query_node.0 + bandwidth;
+                }
+                else if banding_ended == true {
+                    // do banding till till end of table
+                    start = if bandwidth > end_banding_query_node.0 {
+                        0
+                    } else {
+                        end_banding_query_node.0 - bandwidth
+                    };
+                }
+                else{
+                    // normal banding which corrospond to path
+                    // get the current lcsk path - bandwidth as start
+                    start = if bandwidth > lcsk_path_first_part[current_lcsk_path_index].0 {
+                        0
+                    } else {
+                        lcsk_path_first_part[current_lcsk_path_index].0 - bandwidth
+                    };
+                    // get the next lcsk path + bandwidth as end, if not available use start + 2 * bandwidth
+                    if lcsk_path_first_part.len() < current_lcsk_path_index + 1 {
+                        end = lcsk_path_first_part[current_lcsk_path_index + 1].0 + bandwidth;
+                    }
+                    else {
+                        end = lcsk_path_first_part[current_lcsk_path_index].0 + bandwidth;
+                    }
+                }
+    
+                // modify the conditions banding_started, banding ended
+                //println!("start {} end {} current {}", banding_started, banding_ended, current_lcsk_path_index);
+                if banding_ended != true {
+                    if lcsk_path_first_part[current_lcsk_path_index].1 == node.index() {
+                        current_lcsk_path_index += 1;
+                    }
+                    if start_banding_query_node.1 == node.index() {
+                        banding_started = true;
+                    }
+                    if end_banding_query_node.1 == node.index() {
+                        banding_ended = true;
+                    }
+                }
+            }
+            //start = 0;
+            if end > n {
+                end = n;
+            }
+            //end = n;
+            traceback.new_row(
+                i,
+                (end - start) + 1,
+                self.gap_open_score,
+                self.x_clip,
+                start,
+                end + 1,
+            );
+            banded_cell_usage += (end - start) + 1; 
+            // query base and its index in the DAG (traceback matrix rows)
+            for (query_index, query_base) in query.iter().enumerate() {
+                let j = query_index + 1; // 0 index is initialized so we start at 1
+                                         // match and deletion scores for the first reference base
+                let max_cell = if prevs.is_empty() {
+                    let temp_score;
+                    if r == *query_base {
+                        temp_score = self.match_score;
+                    }
+                    else {
+                        temp_score = self.mismatch_score;
+                    }
+                    TracebackCell {
+                        score: traceback.get(0, j - 1).score + temp_score,
+                        op: AlignmentOperation::Match(None),
+                    }
+                } else {
+                    let mut max_cell = max(
+                        TracebackCell {
+                            score: MIN_SCORE,
+                            op: AlignmentOperation::Match(None),
+                        },
+                        TracebackCell {
+                            score: self.x_clip,
+                            op: AlignmentOperation::Xclip(0),
+                        },
+                    );
+                    for prev_node in &prevs {
+                        let i_p: usize = prev_node.index() + 1; // index of previous node
+                        let temp_score;
+                        if r == *query_base {
+                            temp_score = self.match_score;
+                        }
+                        else {
+                            temp_score = self.mismatch_score;
+                        }
+                        max_cell = max(
+                            max_cell,
+                            max(
+                                TracebackCell {
+                                    score: traceback.get(i_p, j - 1).score
+                                        + temp_score,
+                                    op: AlignmentOperation::Match(Some((i_p - 1, i - 1))),
+                                },
+                                TracebackCell {
+                                    score: traceback.get(i_p, j).score + self.gap_open_score,
+                                    op: AlignmentOperation::Del(Some((i_p - 1, i))),
+                                },
+                            ),
+                        );
+                    }
+                    max_cell
+                };
+                let score = max(
+                    max_cell,
+                    TracebackCell {
+                        score: traceback.get(i, j - 1).score + self.gap_open_score,
+                        op: AlignmentOperation::Ins(Some(i - 1)),
+                    },
+                );
+                traceback.set(i, j, score);
+                if max_in_column[j].0 < score.score {
+                    max_in_column[j].0 = score.score;
+                    max_in_column[j].1 = i;
+                }
+            }
+        }
+        // X suffix clipping
+        let mut max_in_row = (0, 0);
+        for j in 0..n + 1 {
+            // avoid pointing to itself
+            if max_in_column[j].1 == traceback.last.index() + 1 {
+                continue;
+            }
+            let maxcell = max(
+                traceback.get(traceback.last.index() + 1, j).clone(),
+                TracebackCell {
+                    score: max_in_column[j].0 + self.x_clip,
+                    op: AlignmentOperation::Xclip(max_in_column[j].1),
+                },
+            );
+            if max_in_row.0 < maxcell.score {
+                max_in_row.0 = maxcell.score;
+                max_in_row.1 = j;
+            }
+            traceback.set(traceback.last.index() + 1, j, maxcell);
+        }
+        // Y suffix clipping from the last node
+        let maxcell = max(
+            traceback.get(traceback.last.index() + 1, n).clone(),
+            TracebackCell {
+                score: max_in_row.0 + self.y_clip,
+                op: AlignmentOperation::Yclip(max_in_row.1, n),
+            },
+        );
+        if max_in_row.1 != n {
+            traceback.set(traceback.last.index() + 1, n, maxcell);
+        }
+        //println!("Banded {}KB", (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
+        self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
+        traceback
+    }
     /// Incorporate a new sequence into a graph from an alignment
     ///
     /// # Arguments
