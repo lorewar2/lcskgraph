@@ -34,7 +34,6 @@
 //! // z differs from x and y's partial order alignment by 1 base
 //! assert_eq!(aligner.global(z).alignment().score, 5);
 //! ```
-
 use std::cmp::{max, Ordering};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Topo;
@@ -717,7 +716,6 @@ impl Poa{
         if lcsk_path.len() == 0 {
             no_kmers = true;
         }
-        
         let mut start_banding_query_node = (0, 0);
         let mut end_banding_query_node = &(0, 0);
         let mut banding_started = false;
@@ -799,7 +797,10 @@ impl Poa{
             );
             banded_cell_usage += (end - start) + 1; 
             // query base and its index in the DAG (traceback matrix rows)
-            for (query_index, query_base) in query.iter().enumerate() {
+            for (query_index, query_base) in query.iter().enumerate().skip(start) {
+                if query_index > end {
+                    break;
+                }
                 let j = query_index + 1; // 0 index is initialized so we start at 1
                                          // match and deletion scores for the first reference base
                 let max_cell = if prevs.is_empty() {

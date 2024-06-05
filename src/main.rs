@@ -18,11 +18,11 @@ const SUB_SECTION_LEN: usize = 1000;
 const MIDDLE_SECTION_LEN: usize = 3162;
 
 fn main() {
-    //arg_runner();
+    arg_runner();
     for seed in 0..100 {
-        println!("RUNNING");
-        test_runner(seed);
-        lcsk_only_start(seed);
+        //println!("RUNNING");
+        //test_runner(seed);
+        //lcsk_only_start(seed);
     }
 }
 
@@ -191,7 +191,7 @@ fn test_runner(seed: usize) {
     //println!("{:?}", kmer_pos_vec);
     let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER_SIZE, kmer_graph_path, &topo_indices);
     println!("old with one window {:?}", lcsk_path[0]);
-    aligner.semiglobal_banded(&y, &lcsk_path, 10000).alignment().score as usize;
+    aligner.semiglobal_banded(&y, &lcsk_path, 100).alignment().score as usize;
     let lcsk_poa_memory = aligner.poa.memory_usage as usize;
     let elapsed = now.elapsed();
     println!("old TIME TAKEN {:?} {}", elapsed, lcsk_poa_memory);
