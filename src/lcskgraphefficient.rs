@@ -175,7 +175,6 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
     let mut kmer_graph_path: Vec<Vec<u32>>= vec![];
     for (index, seq) in graph_sequences.iter().enumerate() {
         let matches = find_kmer_matches_seq1_hashed(&set, seq, k);
-        println!("index {} matches {}", index, matches.len());
         // go through the matches and see if they are in the already made list
         for a_match in matches {
             // get the path index and save it 
@@ -697,21 +696,15 @@ pub fn find_kmer_matches_seq1_hashed(
     k: usize,
 ) -> Vec<(u32, u32)> {
     let mut matches = Vec::new();
-    let mut count = 0;
+
     for i in 0..(seq2.len() + 1).saturating_sub(k) {
         let slc = &seq2[i..i + k];
-        count += 1;
         if let Some(matches1) = seq1_set.get(slc) {
-            if matches1.len() > 2 {
-                println!("Continueing");
-                continue;
-            }
             for pos1 in matches1 {
                 matches.push((*pos1, i as u32));
             }
         }
     }
-    println!("count {}", count);
     // no need to sort, as sorted later, test
     //matches.sort_unstable();
     matches

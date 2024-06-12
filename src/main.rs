@@ -355,13 +355,12 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     let mut string_vec = reads.clone();
     let x = string_vec[0].as_bytes().to_vec();
     let y = string_vec.pop().unwrap().as_bytes().to_vec();
-    println!("len seq 0: {} ", x.len());
+
     let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, band_size as i32);
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-        println!("len seq {}: {} ", index, string_vec[index].len());
     }
-
+    
     let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     let mut all_paths: Vec<Vec<usize>> = vec![];
@@ -378,7 +377,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
         topo_map.insert(node.index(), incrementing_index);
         incrementing_index += 1;
     }
-
+    
 
     //println!("Finding graph IDs");
     //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
@@ -398,19 +397,16 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
                 break;
             }
             error_index += 1;
-
+            
         }
     }
     let now = Instant::now();
     //println!("Finding kmers");
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
-    println!("time for match finding {:?} kmer len {} query len {}", now.elapsed(), kmer_pos_vec.len(), y.len());
     //println!("LCSKgraph");
     //println!("{:?}", kmer_pos_vec);
     let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
-    println!("time for lcsk++ path {:?}", now.elapsed());
-    println!("lcsk++ path length {}", lcsk_path.len());
-
+    
     //let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
@@ -419,7 +415,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     lcsk_poa_time = elapsed.as_micros() as usize;
     //println!("Elapsed: {:.2?}", elapsed);
     //println!("score {}", lcsk_poa_score);
-   // second try
+   // second try   
     let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
