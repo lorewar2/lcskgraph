@@ -406,7 +406,9 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     //println!("LCSKgraph");
     //println!("{:?}", kmer_pos_vec);
     let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
-    
+    println!("time for lcsk++ {:?}", now.elapsed());
+    println!("lcsk++ path length {}", lcsk_path.len());
+
     //let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
