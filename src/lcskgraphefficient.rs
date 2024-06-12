@@ -700,6 +700,10 @@ pub fn find_kmer_matches_seq1_hashed(
     for i in 0..(seq2.len() + 1).saturating_sub(k) {
         let slc = &seq2[i..i + k];
         if let Some(matches1) = seq1_set.get(slc) {
+            // skip non unique kmers
+            if matches1.len() > 2 {
+                continue;
+            }
             for pos1 in matches1 {
                 matches.push((*pos1, i as u32));
             }
