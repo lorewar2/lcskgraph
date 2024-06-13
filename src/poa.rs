@@ -454,6 +454,11 @@ impl Aligner{
         self
     }
 
+    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize) -> &mut Self {
+        self.query = query.to_vec();
+        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth, graph_start_end, graph_section_len);
+        self
+    }
     /// Return alignment graph.
     pub fn graph(&self) -> &POAGraph {
         &self.poa.graph
@@ -902,10 +907,12 @@ impl Poa{
         traceback
     }
 
-    pub fn custom_banded_first_part(&mut self, query: &Vec<u8>, lcsk_path_first_part: &Vec<(usize, usize)>, bandwidth: usize) -> Traceback {
+    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, graph_start_end: (usize, usize), graph_section_len: usize) -> Traceback {
         assert!(self.graph.node_count() != 0);
+        // start bool stuff
+        let mut graph_section_started = false;
         // dimensions of the traceback matrix
-        let (m, n) = (self.graph.node_count(), query.len());
+        let (m, n) = (graph_section_len + 1, query.len());
         // save score location of the max scoring node for the query for suffix clipping
         let mut max_in_column = vec![(0, 0); n + 1];
         let mut traceback = Traceback::with_capacity(m, n);
@@ -913,10 +920,9 @@ impl Poa{
         // construct the score matrix (O(n^2) space)
         let mut topo = Topo::new(&self.graph);
         let mut no_kmers = false;
-        if lcsk_path_first_part.len() == 0 {
+        if lcsk_path.len() == 0 {
             no_kmers = true;
         }
-        
         let mut start_banding_query_node = (0, 0);
         let mut end_banding_query_node = &(0, 0);
         let mut banding_started = false;
@@ -924,14 +930,25 @@ impl Poa{
         let mut current_lcsk_path_index = 0;
         let mut banded_cell_usage = 0;
         if !no_kmers {
-            start_banding_query_node = lcsk_path_first_part[0];
-            end_banding_query_node = lcsk_path_first_part.last().unwrap();
+            start_banding_query_node = lcsk_path[0];
+            end_banding_query_node = lcsk_path.last().unwrap();
         }
-        
+        let mut start_delay = 0;
         while let Some(node) = topo.next(&self.graph) {
+            // if not started just skip, break if end reached
+            if node.index() == graph_start_end.0 {
+                graph_section_started = true;
+            }
+            if node.index() == graph_start_end.1 {
+                break;
+            }
+            if graph_section_started == false {
+                start_delay += 1;
+                continue;
+            }
             // reference base and index
             let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
-            let i = node.index() + 1; // 0 index is for initialization so we start at 1
+            let i = node.index() + 1 - start_delay; // 0 index is for initialization so we start at 1
             traceback.last = node;
             // iterate over the predecessors of this node
             let prevs: Vec<NodeIndex<usize>> =
@@ -955,24 +972,24 @@ impl Poa{
                 else{
                     // normal banding which corrospond to path
                     // get the current lcsk path - bandwidth as start
-                    start = if bandwidth > lcsk_path_first_part[current_lcsk_path_index].0 {
+                    start = if bandwidth > lcsk_path[current_lcsk_path_index].0 {
                         0
                     } else {
-                        lcsk_path_first_part[current_lcsk_path_index].0 - bandwidth
+                        lcsk_path[current_lcsk_path_index].0 - bandwidth
                     };
                     // get the next lcsk path + bandwidth as end, if not available use start + 2 * bandwidth
-                    if lcsk_path_first_part.len() < current_lcsk_path_index + 1 {
-                        end = lcsk_path_first_part[current_lcsk_path_index + 1].0 + bandwidth;
+                    if lcsk_path.len() < current_lcsk_path_index + 1 {
+                        end = lcsk_path[current_lcsk_path_index + 1].0 + bandwidth;
                     }
                     else {
-                        end = lcsk_path_first_part[current_lcsk_path_index].0 + bandwidth;
+                        end = lcsk_path[current_lcsk_path_index].0 + bandwidth;
                     }
                 }
     
                 // modify the conditions banding_started, banding ended
                 //println!("start {} end {} current {}", banding_started, banding_ended, current_lcsk_path_index);
                 if banding_ended != true {
-                    if lcsk_path_first_part[current_lcsk_path_index].1 == node.index() {
+                    if lcsk_path[current_lcsk_path_index].1 == node.index() {
                         current_lcsk_path_index += 1;
                     }
                     if start_banding_query_node.1 == node.index() {
@@ -998,7 +1015,10 @@ impl Poa{
             );
             banded_cell_usage += (end - start) + 1; 
             // query base and its index in the DAG (traceback matrix rows)
-            for (query_index, query_base) in query.iter().enumerate() {
+            for (query_index, query_base) in query.iter().enumerate().skip(start) {
+                if query_index > end {
+                    break;
+                }
                 let j = query_index + 1; // 0 index is initialized so we start at 1
                                          // match and deletion scores for the first reference base
                 let max_cell = if prevs.is_empty() {

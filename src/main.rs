@@ -56,7 +56,8 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
         topo_map.insert(node.index(), incrementing_index);
         incrementing_index += 1;
     }
-
+    let head_node = topo_indices[0];
+    let end_node = topo_indices.last().unwrap();
     //println!("Finding graph IDs");
     //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
     for sequence in string_vec.clone() {
@@ -87,12 +88,41 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     println!("time for lcsk++ {:?}", now.elapsed());
     println!("lcsk++ path length {}", lcsk_path.len());
     // find the anchors here and display to test
-    let anchors = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 2);
-    println!("{:?}", anchors);
-    // get start and end from anchors and do poa for each section
+    if lcsk_path.len() > 0 {
+        let anchors = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 2, head_node, *end_node, y.len(), topo_indices.len());
+        // order in graph, graph index, query index
+        println!("{:?}", anchors);
+        // get start and end from anchors and do poa for each section
+        let mut lcsk_path_index = 0;
+        for anchor_index in 0..anchors.len() - 1 {
+            let mut section_lcsk_path = vec![];
+            // calculate start and end graph and query
+            let query_start_end = (anchors[anchor_index].2, anchors[anchor_index + 1].2);
+            let query_length = anchors[anchor_index + 1].2 - anchors[anchor_index].2;
+            let graph_start_end = (anchors[anchor_index].1, anchors[anchor_index + 1].1);
+            let graph_length = anchors[anchor_index + 1].0 - anchors[anchor_index].0;
+            // find the lcsk path index start match
+            while lcsk_path_unconverted[lcsk_path_index] < (anchors[anchor_index].2, anchors[anchor_index].0) {
+                lcsk_path_index += 1;
+            }
+            // find the lcsk path index end match, save the path section until end
+            while lcsk_path_unconverted[lcsk_path_index] < (anchors[anchor_index + 1].2, anchors[anchor_index + 1].0) {
+                section_lcsk_path.push(lcsk_path[lcsk_path_index]);
+                lcsk_path_index += 1;
+            }
+            // do poa, make a new function in poa for this input query start end len graph start end len section lcsk path
+            // cut the query according to start end,
+            let section_query = y[query_start_end.0..query_start_end.1].to_vec();
+            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, graph_start_end, graph_length).alignment().score as usize;
+            println!("section score {}", section_score);
+            println!("query start end {:?} length {}", query_start_end, query_length);
+            println!("graph start end {:?} length {}", graph_start_end, graph_length);
+            println!("lcsk path {:?}", section_lcsk_path);
+        }
+    }
     
     //let output_graph = aligner.graph();
-    println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
     lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
     let elapsed = now.elapsed();
     lcsk_poa_memory = aligner.poa.memory_usage as usize;

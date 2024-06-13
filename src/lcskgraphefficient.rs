@@ -11,9 +11,10 @@ use itertools::Itertools;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize) -> Vec<(usize, usize, usize)> {
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, head_node_index: usize, end_node_index: usize, query_length: usize, graph_nodes: usize) -> Vec<(usize, usize, usize)> {
     let mut current_cut_limit = cut_limit;
-    let mut anchors= vec![]; // order in graph, graph index, query index
+    // add head node and stuff to the anchors
+    let mut anchors= vec![(0, head_node_index, 0)]; // order in graph, graph index, query index
     for (index, pos) in ascending_path.iter().enumerate() {
         // go through the ascending path until we hit limit
         if (pos.0 > current_cut_limit) && (pos.1 > current_cut_limit) {
@@ -35,7 +36,9 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 current_cut_limit += 1;
             }
         }
-    }  
+    }
+    // add the end to anchor
+    anchors.push((graph_nodes - 1, end_node_index, query_length - 1));
     anchors
 }
 
