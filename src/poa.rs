@@ -1050,7 +1050,7 @@ impl Poa{
                     );
                     for prev_node in &prevs {
                         // get the prev_node index in ascending order
-                        println!("Reached here");
+                        //println!("Reached here");
                         let i_p: usize = prev_node.index()+ 1; // index of previous node
                         let temp_score;
                         if r == *query_base {
@@ -1073,7 +1073,7 @@ impl Poa{
                                 },
                             ),
                         );
-                        println!("DID not Reach here");
+                        //println!("DID not Reach here");
                     }
                     max_cell
                 };
@@ -1085,7 +1085,7 @@ impl Poa{
                     },
                 );
                 traceback.set(i, j, score);
-                println!("DID not Reach here");
+                //println!("DID not Reach here");
                 if max_in_column[j].0 < score.score {
                     max_in_column[j].0 = score.score;
                     max_in_column[j].1 = i;
