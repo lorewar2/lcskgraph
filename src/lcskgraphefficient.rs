@@ -11,10 +11,68 @@ use itertools::Itertools;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, num_of_paths: usize, k: usize, kmer_graph_index: Vec<Vec<u32>>, topo_map: &Vec<usize>) -> (Vec<(usize, usize)>, u32) {
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize) -> Vec<(usize, usize, usize)> {
+    let mut current_cut_limit = cut_limit;
+    let mut anchors= vec![]; // order in graph, graph index, query index
+    for (index, pos) in ascending_path.iter().enumerate() {
+        // go through the ascending path until we hit limit
+        if (pos.0 > current_cut_limit) && (pos.1 > current_cut_limit) {
+            // check if that node only has one outgoing path with weight sequence length
+            let node_index = original_path[index].1;
+            println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
+            if try_to_make_the_cut(graph, node_index, number_of_sequences) {
+                println!("Cut successful");
+                // cut possible
+                // if yes select as anchor
+                anchors.push((pos.1, node_index, pos.0));
+                // increase the current cut limit by cutlimit
+                current_cut_limit += cut_limit;
+            }
+            else {
+                println!("Cut failed");
+                // cut not possible
+                // if not go to the next node increase the current cutlimit by 1
+                current_cut_limit += 1;
+            }
+        }
+    }  
+    anchors
+}
+
+pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {
+    // for the selected node, see if there is only one outgoing edge
+    let mut neighbour_nodes = output_graph.neighbors_directed(NodeIndex::new(topo_index), Outgoing);
+    let mut number_of_outgoing_node = 0;
+    let mut number_of_seq_match = false;
+    while let Some(neighbour_node) = neighbour_nodes.next() {
+        number_of_outgoing_node += 1;
+        if number_of_outgoing_node == 1 {
+            let mut edges = output_graph.edges_connecting(NodeIndex::new(topo_index), neighbour_node);
+            let mut weight: i32 = 0;
+            while let Some(edge) = edges.next() {
+                weight += edge.weight().clone();
+            }
+            if weight == total_num_sequences as i32 {
+                number_of_seq_match = true;
+            }
+        }
+        if number_of_outgoing_node >= 2 {
+            break;
+        }
+    }
+    // if cut is successful return true
+    if (number_of_outgoing_node == 1) && (number_of_seq_match) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>>, kmers_previous_node_in_paths: Vec<Vec<u32>>, num_of_paths: usize, k: usize, kmer_graph_index: Vec<Vec<u32>>, topo_map: &Vec<usize>) -> (Vec<(usize, usize)>, Vec<(usize, usize)>, u32) {
     // return nothing if empty
     if kmer_pos_vec.is_empty() {
-        return (vec![], 0);
+        return (vec![], vec![],  0);
     }
 
     let k = k as u32;
@@ -134,6 +192,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
     //println!("PATHS");
     
     let mut query_graph_path = vec![];
+    let mut unconverted_query_graph_path = vec![];
     let mut last_node = usize::MAX;
     while prev_match >= 0 {
         //println!("{} ", prev_match);
@@ -150,6 +209,7 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
             }
             //println!("q pos {}", query_pos);
             query_graph_path.push((query_pos as usize, converted_node));
+            unconverted_query_graph_path.push((query_pos as usize, *node as usize));
             query_pos -= 1;
             //println!("{} != {}", last_node, current_node);
             assert!(last_node >= current_node);
@@ -159,8 +219,9 @@ pub fn lcskpp_graph(kmer_pos_vec: Vec<(u32, u32)>, kmer_path_vec: Vec<Vec<usize>
         prev_match = dp[prev_match as usize].1;
     }
     query_graph_path.reverse();
+    unconverted_query_graph_path.reverse();
     //println!("{:?}", query_graph_path);
-    (query_graph_path, best_score)
+    (query_graph_path, unconverted_query_graph_path, best_score)
 }
 
 pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize) -> (Vec<(u32, u32)>, Vec<Vec<usize>>, Vec<Vec<u32>>, Vec<Vec<u32>>) {
@@ -554,36 +615,6 @@ pub fn divide_poa_graph_get_paths (output_graph: &POAGraph, topo_indices: &Vec<u
         all_all_sequences.push(all_sequences);
     }
     return (all_all_paths, all_all_sequences, max_number_of_paths_per_section);
-}
-
-pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {
-    // for the selected node, see if there is only one outgoing edge
-    let mut neighbour_nodes = output_graph.neighbors_directed(NodeIndex::new(topo_index), Outgoing);
-    let mut number_of_outgoing_node = 0;
-    let mut number_of_seq_match = false;
-    while let Some(neighbour_node) = neighbour_nodes.next() {
-        number_of_outgoing_node += 1;
-        if number_of_outgoing_node == 1 {
-            let mut edges = output_graph.edges_connecting(NodeIndex::new(topo_index), neighbour_node);
-            let mut weight: i32 = 0;
-            while let Some(edge) = edges.next() {
-                weight += edge.weight().clone();
-            }
-            if weight == total_num_sequences as i32 {
-                number_of_seq_match = true;
-            }
-        }
-        if number_of_outgoing_node >= 2 {
-            break;
-        }
-    }
-    // if cut is successful return true
-    if (number_of_outgoing_node == 1) && (number_of_seq_match) {
-        return true;
-    }
-    else {
-        return false;
-    }
 }
 
 pub fn simple_dfs_with_start_end (
