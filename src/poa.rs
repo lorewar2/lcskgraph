@@ -39,6 +39,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::Topo;
 use std::mem;
 use petgraph::{Directed, Graph, Incoming};
+use std::{collections::HashMap};
 
 pub const MIN_SCORE: i32 = -858_993_459; // negative infinity; see alignment/pairwise/mod.rs
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
@@ -454,9 +455,9 @@ impl Aligner{
         self
     }
 
-    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize) -> &mut Self {
+    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>) -> &mut Self {
         self.query = query.to_vec();
-        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth, graph_start_end, graph_section_len);
+        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth, graph_start_end, graph_section_len, hash_map);
         self
     }
     /// Return alignment graph.
@@ -906,13 +907,13 @@ impl Poa{
         self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
         traceback
     }
-
-    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, graph_start_end: (usize, usize), graph_section_len: usize) -> Traceback {
+    // need to convert this shit to use and ascending topo indices instead topo indices, extra input maybe just the hashmap
+    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>) -> Traceback {
         assert!(self.graph.node_count() != 0);
         // start bool stuff
         let mut graph_section_started = false;
         // dimensions of the traceback matrix
-        let (m, n) = (graph_section_len + 1, query.len());
+        let (m, n) = (self.graph.node_count(), query.len());
         // save score location of the max scoring node for the query for suffix clipping
         let mut max_in_column = vec![(0, 0); n + 1];
         let mut traceback = Traceback::with_capacity(m, n);
@@ -934,7 +935,10 @@ impl Poa{
             end_banding_query_node = lcsk_path.last().unwrap();
         }
         let mut start_delay = 0;
+        let mut current_topo_index = 0; // ascending index
+        println!("Started here");
         while let Some(node) = topo.next(&self.graph) {
+            current_topo_index += 1;
             // if not started just skip, break if end reached
             if node.index() == graph_start_end.0 {
                 graph_section_started = true;
@@ -948,7 +952,7 @@ impl Poa{
             }
             // reference base and index
             let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
-            let i = node.index() + 1 - start_delay; // 0 index is for initialization so we start at 1
+            let i = node.index() + 1; // 0 index is for initialization so we start at 1
             traceback.last = node;
             // iterate over the predecessors of this node
             let prevs: Vec<NodeIndex<usize>> =
@@ -1045,7 +1049,9 @@ impl Poa{
                         },
                     );
                     for prev_node in &prevs {
-                        let i_p: usize = prev_node.index() + 1; // index of previous node
+                        // get the prev_node index in ascending order
+                        println!("Reached here");
+                        let i_p: usize = prev_node.index()+ 1; // index of previous node
                         let temp_score;
                         if r == *query_base {
                             temp_score = self.match_score;
@@ -1067,6 +1073,7 @@ impl Poa{
                                 },
                             ),
                         );
+                        println!("DID not Reach here");
                     }
                     max_cell
                 };
@@ -1078,13 +1085,13 @@ impl Poa{
                     },
                 );
                 traceback.set(i, j, score);
+                println!("DID not Reach here");
                 if max_in_column[j].0 < score.score {
                     max_in_column[j].0 = score.score;
                     max_in_column[j].1 = i;
                 }
             }
         }
-        // X suffix clipping
         let mut max_in_row = (0, 0);
         for j in 0..n + 1 {
             // avoid pointing to itself

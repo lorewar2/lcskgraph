@@ -10,7 +10,6 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 use std::env;
-use petgraph::dot::Dot;
 
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
@@ -94,6 +93,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
         println!("{:?}", anchors);
         // get start and end from anchors and do poa for each section
         let mut lcsk_path_index = 0;
+        let mut total_section_score = 0;
         for anchor_index in 0..anchors.len() - 1 {
             let mut section_lcsk_path = vec![];
             // calculate start and end graph and query
@@ -113,12 +113,14 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             // do poa, make a new function in poa for this input query start end len graph start end len section lcsk path
             // cut the query according to start end,
             let section_query = y[query_start_end.0..query_start_end.1].to_vec();
-            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, graph_start_end, graph_length).alignment().score as usize;
+            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, graph_start_end, graph_length, &topo_map).alignment().score;
+            total_section_score += section_score;
             println!("section score {}", section_score);
             println!("query start end {:?} length {}", query_start_end, query_length);
             println!("graph start end {:?} length {}", graph_start_end, graph_length);
             println!("lcsk path {:?}", section_lcsk_path);
         }
+        println!("total section score {}", total_section_score);
     }
     
     //let output_graph = aligner.graph();
