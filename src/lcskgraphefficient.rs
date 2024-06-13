@@ -1,5 +1,6 @@
 use crate::bit_tree::MaxBitTree;
 use fxhash::FxHasher;
+use petgraph::Direction::Incoming;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -7,22 +8,55 @@ use petgraph::Outgoing;
 use petgraph::graph::NodeIndex;
 use petgraph::{Directed, Graph};
 use itertools::Itertools;
+use petgraph::dot::Dot;
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, head_node_index: usize, end_node_index: usize, query_length: usize, graph_nodes: usize) -> Vec<(usize, usize, usize)> {
     let mut current_cut_limit = cut_limit;
+    let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
+    // add the head node to first graph
+    let mut section_graph: Graph<u8, i32, Directed, usize> = Graph::default();
+    let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
+    let mut this_is_head_node = true;
+    let section_head_node = section_graph.add_node(graph.raw_nodes()[head_node_index].weight);
+    node_tracker[head_node_index] = section_head_node.index();
     // add head node and stuff to the anchors
     let mut anchors= vec![(0, head_node_index, 0)]; // order in graph, graph index, query index
     for (index, pos) in ascending_path.iter().enumerate() {
         // go through the ascending path until we hit limit
+        let node_index = original_path[index].1;
+        // check if this node has any incoming edges if so save them to the new graphs node
+        let added_node = section_graph.add_node(graph.raw_nodes()[node_index].weight);
+        println!("Now adding node {} node index {}", added_node.index(), node_index);
+        node_tracker[node_index] = added_node.index();
+        let incoming_nodes: Vec<NodeIndex<usize>> = graph.neighbors_directed(NodeIndex::new(node_index), Incoming).collect();
+        if this_is_head_node == false {
+            for incoming_node in incoming_nodes {
+                let mut edges = graph.edges_connecting(incoming_node, NodeIndex::new(node_index));
+                let mut incoming_weight = 0;
+                while let Some(edge) = edges.next() {
+                    incoming_weight += edge.weight().clone();
+                }
+                let section_incoming_node = node_tracker[incoming_node.index()];
+                println!("Here? {} {}", added_node.index(), section_incoming_node);
+                section_graph.add_edge(NodeIndex::new(section_incoming_node), added_node, incoming_weight);
+            }
+        }
+        else {
+            this_is_head_node = false;
+        }
         if (pos.0 > current_cut_limit) && (pos.1 > current_cut_limit) {
-            // check if that node only has one outgoing path with weight sequence length
-            let node_index = original_path[index].1;
+            // add the current node and add the edges from previous nodes
             println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
             if try_to_make_the_cut(graph, node_index, number_of_sequences) {
+                // put the graph in vector and make new graph
+                println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
+                section_graphs.push(section_graph);
+                section_graph = Graph::default();
                 println!("Cut successful");
+                this_is_head_node = true;
                 // cut possible
                 // if yes select as anchor
                 anchors.push((pos.1, node_index, pos.0));
@@ -30,6 +64,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 current_cut_limit += cut_limit;
             }
             else {
+                // do nothing
                 println!("Cut failed");
                 // cut not possible
                 // if not go to the next node increase the current cutlimit by 1
@@ -37,6 +72,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
             }
         }
     }
+    section_graphs.push(section_graph);
     // add the end to anchor
     anchors.push((graph_nodes - 1, end_node_index, query_length - 1));
     anchors
@@ -244,7 +280,6 @@ pub fn better_find_kmer_matches(query: &[u8], graph_sequences: &Vec<Vec<u8>>, gr
             // get the path index and save it 
             let mut graph_path = vec![];
             // first get the graph index for the match
-            
             for graph_node in a_match.1..a_match.1 + k as u32 {
                 graph_path.push(graph_ids[index][graph_node as usize] as u32);
             }
