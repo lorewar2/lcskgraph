@@ -455,7 +455,8 @@ impl Aligner{
         self
     }
 
-    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>) -> &mut Self {
+    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>, section_graph: Graph<u8, i32, Directed, usize>) -> &mut Self {
+        self.poa.graph = section_graph;
         self.query = query.to_vec();
         self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth, graph_start_end, graph_section_len, hash_map);
         self

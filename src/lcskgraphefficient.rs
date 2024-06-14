@@ -13,7 +13,7 @@ use petgraph::dot::Dot;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, head_node_index: usize, end_node_index: usize, query_length: usize, graph_nodes: usize) -> Vec<(usize, usize, usize)> {
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, head_node_index: usize, end_node_index: usize, query_length: usize, graph_nodes: usize) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>) {
     let mut current_cut_limit = cut_limit;
     let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
     // add the head node to first graph
@@ -75,7 +75,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     section_graphs.push(section_graph);
     // add the end to anchor
     anchors.push((graph_nodes - 1, end_node_index, query_length - 1));
-    anchors
+    (anchors, section_graphs)
 }
 
 pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {
