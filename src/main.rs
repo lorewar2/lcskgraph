@@ -129,12 +129,12 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             else {
                 section_query = y[query_start_end.1..query_start_end.0].to_vec();
             }
-            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, graph_start_end, graph_length, &topo_map, section_graphs[index]).alignment().score;
-            total_section_score += section_score;
-            println!("section score {}", section_score);
             println!("query start end {:?}", query_start_end);
             println!("graph start end {:?} length {}", graph_start_end, graph_length);
             println!("lcsk path {:?}", section_lcsk_path);
+            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, graph_start_end, graph_length, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
+            total_section_score += section_score;
+            println!("section score {}", section_score);
         }
         println!("total section score {}", total_section_score);
     }
