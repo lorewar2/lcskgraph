@@ -455,10 +455,10 @@ impl Aligner{
         self
     }
 
-    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize,graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>, section_graph: Graph<u8, i32, Directed, usize>) -> &mut Self {
+    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, hash_map: &HashMap<usize, usize>, section_graph: Graph<u8, i32, Directed, usize>) -> &mut Self {
         self.poa.graph = section_graph;
         self.query = query.to_vec();
-        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth, graph_start_end, graph_section_len, hash_map);
+        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth,hash_map);
         self
     }
     /// Return alignment graph.
@@ -909,10 +909,8 @@ impl Poa{
         traceback
     }
     // need to convert this shit to use and ascending topo indices instead topo indices, extra input maybe just the hashmap
-    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, graph_start_end: (usize, usize), graph_section_len: usize, hash_map: &HashMap<usize, usize>) -> Traceback {
+    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, hash_map: &HashMap<usize, usize>) -> Traceback {
         assert!(self.graph.node_count() != 0);
-        // start bool stuff
-        let mut graph_section_started = false;
         // dimensions of the traceback matrix
         let (m, n) = (self.graph.node_count(), query.len());
         // save score location of the max scoring node for the query for suffix clipping
@@ -940,17 +938,6 @@ impl Poa{
         println!("Started here");
         while let Some(node) = topo.next(&self.graph) {
             current_topo_index += 1;
-            // if not started just skip, break if end reached
-            if node.index() == graph_start_end.0 {
-                graph_section_started = true;
-            }
-            if node.index() == graph_start_end.1 {
-                break;
-            }
-            if graph_section_started == false {
-                start_delay += 1;
-                continue;
-            }
             // reference base and index
             let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
             let i = node.index() + 1; // 0 index is for initialization so we start at 1
