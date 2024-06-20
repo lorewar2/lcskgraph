@@ -933,11 +933,9 @@ impl Poa{
             start_banding_query_node = lcsk_path[0];
             end_banding_query_node = lcsk_path.last().unwrap();
         }
-        let mut start_delay = 0;
-        let mut current_topo_index = 0; // ascending index
-        println!("Started here");
+        //println!("Started here");
         while let Some(node) = topo.next(&self.graph) {
-            current_topo_index += 1;
+
             // reference base and index
             let r = self.graph.raw_nodes()[node.index()].weight; // reference base at previous index
             let i = node.index() + 1; // 0 index is for initialization so we start at 1
@@ -948,6 +946,7 @@ impl Poa{
             // banding stuff do here
             let mut start = 0;
             let mut end = n;
+            //println!("Start calculation");
             if !no_kmers {
                 if banding_started == false {
                     //do banding till start_banding_query_node + bandwidth
@@ -967,13 +966,16 @@ impl Poa{
                     start = if bandwidth > lcsk_path[current_lcsk_path_index].0 {
                         0
                     } else {
+                        //println!("{}", lcsk_path[current_lcsk_path_index].0); 
                         lcsk_path[current_lcsk_path_index].0 - bandwidth
                     };
                     // get the next lcsk path + bandwidth as end, if not available use start + 2 * bandwidth
                     if lcsk_path.len() < current_lcsk_path_index + 1 {
+                        //println!("{}", lcsk_path[current_lcsk_path_index + 1].0); 
                         end = lcsk_path[current_lcsk_path_index + 1].0 + bandwidth;
                     }
                     else {
+                        //println!("{}", lcsk_path[current_lcsk_path_index].0); 
                         end = lcsk_path[current_lcsk_path_index].0 + bandwidth;
                     }
                 }
@@ -997,6 +999,7 @@ impl Poa{
                 end = n;
             }
             //end = n;
+            //println!("End calvulated!!! start {} end {} banding start {} banding end {}", start, end, banding_started, banding_ended);
             traceback.new_row(
                 i,
                 (end - start) + 1,
@@ -1005,7 +1008,8 @@ impl Poa{
                 start,
                 end + 1,
             );
-            banded_cell_usage += (end - start) + 1; 
+            banded_cell_usage += (end - start) + 1;
+            //println!("End calvulated");
             // query base and its index in the DAG (traceback matrix rows)
             for (query_index, query_base) in query.iter().enumerate().skip(start) {
                 if query_index > end {
@@ -1112,6 +1116,7 @@ impl Poa{
         }
         //println!("Banded {}KB", (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024);
         self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
+        //println!("REACJED END");
         traceback
     }
     /// Incorporate a new sequence into a graph from an alignment

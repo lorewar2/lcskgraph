@@ -13,43 +13,55 @@ use petgraph::dot::Dot;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, head_node_index: usize, end_node_index: usize, query_length: usize, graph_nodes: usize) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>) {
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>) {
     let mut current_cut_limit = cut_limit;
     let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
     // add the head node to first graph
     let mut section_graph: Graph<u8, i32, Directed, usize> = Graph::default();
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
     let mut this_is_head_node = true;
-    let section_head_node = section_graph.add_node(graph.raw_nodes()[head_node_index].weight);
-    node_tracker[head_node_index] = section_head_node.index();
+    let section_head_node = section_graph.add_node(graph.raw_nodes()[topo_indices[0]].weight);
+    node_tracker[topo_indices[0]] = section_head_node.index();
+    let mut topo_indices_index = 0;
     // add head node and stuff to the anchors
-    let mut anchors= vec![(0, head_node_index, 0)]; // order in graph, graph index, query index
+    let mut anchors= vec![(0, topo_indices[0], 0)]; // order in graph, graph index, query index
     for (index, pos) in ascending_path.iter().enumerate() {
-        // go through the ascending path until we hit limit
         let node_index = original_path[index].1;
-        // check if this node has any incoming edges if so save them to the new graphs node
-        let added_node = section_graph.add_node(graph.raw_nodes()[node_index].weight);
-        println!("Now adding node {} node index {}", added_node.index(), node_index);
-        node_tracker[node_index] = added_node.index();
-        let incoming_nodes: Vec<NodeIndex<usize>> = graph.neighbors_directed(NodeIndex::new(node_index), Incoming).collect();
-        if this_is_head_node == false {
-            for incoming_node in incoming_nodes {
-                let mut edges = graph.edges_connecting(incoming_node, NodeIndex::new(node_index));
-                let mut incoming_weight = 0;
-                while let Some(edge) = edges.next() {
-                    incoming_weight += edge.weight().clone();
+        // add nodes until we reach the pos node index to the graph
+        loop  {
+            //add node
+            // check if this node has any incoming edges if so save them to the new graphs node
+            let added_node = section_graph.add_node(graph.raw_nodes()[topo_indices[topo_indices_index]].weight);
+            node_tracker[topo_indices[topo_indices_index]] = added_node.index();
+            //println!("Now adding node {} node index {} lcsk node index {}", added_node.index(), topo_indices[topo_indices_index], node_index);
+            let incoming_nodes: Vec<NodeIndex<usize>> = graph.neighbors_directed(NodeIndex::new(topo_indices[topo_indices_index]), Incoming).collect();
+            if this_is_head_node == false {
+                for incoming_node in incoming_nodes {
+                    let mut edges = graph.edges_connecting(incoming_node, NodeIndex::new(topo_indices[topo_indices_index]));
+                    let mut incoming_weight = 0;
+                    while let Some(edge) = edges.next() {
+                        incoming_weight += edge.weight().clone();
+                    }
+                    let section_incoming_node = node_tracker[incoming_node.index()];
+                    //println!("Here? {} {}", added_node.index(), section_incoming_node);
+                    section_graph.add_edge(NodeIndex::new(section_incoming_node), added_node, incoming_weight);
                 }
-                let section_incoming_node = node_tracker[incoming_node.index()];
-                println!("Here? {} {}", added_node.index(), section_incoming_node);
-                section_graph.add_edge(NodeIndex::new(section_incoming_node), added_node, incoming_weight);
             }
+            else {
+                this_is_head_node = false;
+            }
+            
+            if topo_indices[topo_indices_index] == node_index {
+                topo_indices_index += 1;
+                break;
+            }
+            topo_indices_index += 1;
         }
-        else {
-            this_is_head_node = false;
-        }
+        // go through the ascending path until we hit limit
         if (pos.0 > current_cut_limit) && (pos.1 > current_cut_limit) {
+            println!("CURRENT CUT LIMIT {} pos0 {} pos1 {}", current_cut_limit, pos.0, pos.1);
             // add the current node and add the edges from previous nodes
-            println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
+            //println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
             if try_to_make_the_cut(graph, node_index, number_of_sequences) {
                 // put the graph in vector and make new graph
                 println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
@@ -61,21 +73,50 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 // if yes select as anchor
                 anchors.push((pos.1, node_index, pos.0));
                 // increase the current cut limit by cutlimit
-                current_cut_limit += cut_limit;
+                current_cut_limit = max(pos.0, pos.1) + cut_limit;
             }
             else {
                 // do nothing
                 println!("Cut failed");
                 // cut not possible
                 // if not go to the next node increase the current cutlimit by 1
-                current_cut_limit += 1;
+                current_cut_limit = max(pos.0, pos.1) + 1;
             }
         }
     }
+    // make a graph with rest of the nodes
+    loop {
+        if topo_indices_index == topo_indices.len() {
+            break;
+        }
+        let added_node = section_graph.add_node(graph.raw_nodes()[topo_indices[topo_indices_index]].weight);
+        node_tracker[topo_indices[topo_indices_index]] = added_node.index();
+        //println!("Now adding node {} node index {} lcsk node index {}", added_node.index(), topo_indices[topo_indices_index], node_index);
+        let incoming_nodes: Vec<NodeIndex<usize>> = graph.neighbors_directed(NodeIndex::new(topo_indices[topo_indices_index]), Incoming).collect();
+        if this_is_head_node == false {
+            for incoming_node in incoming_nodes {
+                let mut edges = graph.edges_connecting(incoming_node, NodeIndex::new(topo_indices[topo_indices_index]));
+                let mut incoming_weight = 0;
+                while let Some(edge) = edges.next() {
+                    incoming_weight += edge.weight().clone();
+                }
+                let section_incoming_node = node_tracker[incoming_node.index()];
+                //println!("Here? {} {}", added_node.index(), section_incoming_node);
+                section_graph.add_edge(NodeIndex::new(section_incoming_node), added_node, incoming_weight);
+            }
+        }
+        else {
+            this_is_head_node = false;
+        }
+        topo_indices_index += 1;
+        
+    }
+    println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
     section_graphs.push(section_graph);
     // add the end to anchor
-    anchors.push((graph_nodes - 1, end_node_index, query_length - 1));
-    (anchors, section_graphs)
+    anchors.push((topo_indices.len(), *topo_indices.last().unwrap(), query_length - 1));
+    //println!("{:?}", Dot::new(&graph.map(|_, n| (*n) as char, |_, e| *e)));
+    (anchors, section_graphs, node_tracker)
 }
 
 pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {

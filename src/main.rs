@@ -13,7 +13,7 @@ use std::env;
 
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
-const BAND_SIZE: usize = 100;
+const BAND_SIZE: usize = 10000;
 const SUB_SECTION_LEN: usize = 1000;
 const MIDDLE_SECTION_LEN: usize = 3162;
 
@@ -23,7 +23,7 @@ fn main() {
 
 fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) -> (usize, usize, usize, usize, usize, usize){
     //for evaluating varibles
-    let lcsk_poa_score;
+    let lcsk_poa_score: usize;
     let normal_poa_score;
     let lcsk_poa_time;
     let normal_poa_time;
@@ -86,23 +86,35 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
     println!("time for lcsk++ {:?}", now.elapsed());
     println!("lcsk++ path length {}", lcsk_path.len());
+    let mut total_section_score = 0;
     // find the anchors here and display to test
     if lcsk_path.len() > 0 {
-        let (anchors, section_graphs) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 20, head_node, *end_node, y.len(), topo_indices.len());
+        let (anchors, section_graphs, node_tracker) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices);
         // order in graph, graph index, query index
         println!("{:?}", anchors);
+        println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
         // get start and end from anchors and do poa for each section
         let mut lcsk_path_index = 0;
-        let mut total_section_score = 0;
+        
         println!("anchors {:?}", anchors);
         for anchor_index in 0..anchors.len() - 1 {
-            let mut section_lcsk_path = vec![];
+            
             // calculate start and end graph and query
             let query_start_end = (anchors[anchor_index].2, anchors[anchor_index + 1].2);
-            let graph_start_end = (anchors[anchor_index].1, anchors[anchor_index + 1].1);
-            let graph_length = anchors[anchor_index + 1].0 - anchors[anchor_index].0;
+            let section_query ;
+            let mut cut_off = 0;
+            if query_start_end.1 > query_start_end.0 {
+                section_query = y[query_start_end.0..query_start_end.1].to_vec();
+                cut_off = query_start_end.0;
+            }
+            else {
+                section_query = y[query_start_end.1..query_start_end.0].to_vec();
+                cut_off = query_start_end.1;
+            }
+            let mut section_lcsk_path = vec![];
+            //lcsk path finder!!!!
             // find the lcsk path index start match
-            while lcsk_path_unconverted[lcsk_path_index] < (anchors[anchor_index].2, anchors[anchor_index].0) {
+            while lcsk_path_unconverted[lcsk_path_index] <= (anchors[anchor_index].2, anchors[anchor_index].0) {
                 if lcsk_path_index + 1 >= lcsk_path.len() {
                     break;
                 }
@@ -116,23 +128,11 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
                 if lcsk_path_index + 1 >= lcsk_path.len() {
                     break;
                 }
-                section_lcsk_path.push(lcsk_path[lcsk_path_index]);
+                section_lcsk_path.push((lcsk_path[lcsk_path_index].0 - cut_off + 5, node_tracker[lcsk_path[lcsk_path_index].1]));
                 lcsk_path_index += 1;
             }
-            // do poa, make a new function in poa for this input query start end len graph start end len section lcsk path
-            // cut the query according to start end,
-            println!("{} {} {}", y.len(), query_start_end.0, query_start_end.1);
-            let section_query ;
-            if query_start_end.1 > query_start_end.0 {
-                section_query = y[query_start_end.0..query_start_end.1].to_vec();
-            }
-            else {
-                section_query = y[query_start_end.1..query_start_end.0].to_vec();
-            }
-            println!("query start end {:?}", query_start_end);
-            println!("graph start end {:?} length {}", graph_start_end, graph_length);
             println!("lcsk path {:?}", section_lcsk_path);
-            let section_score = aligner.custom_banded_threaded(&section_query, &lcsk_path, band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
+            let section_score = aligner.custom_banded_threaded(&section_query, &section_lcsk_path, band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
             if section_score > 0 {
                 total_section_score += section_score;
             }
@@ -144,7 +144,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     
     //let output_graph = aligner.graph();
     //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-    lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
+    //lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
     let elapsed = now.elapsed();
     lcsk_poa_memory = aligner.poa.memory_usage as usize;
     lcsk_poa_time = elapsed.as_micros() as usize;
@@ -162,7 +162,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     //println!("score {}", normal_poa_score);
     normal_poa_time = elapsed.as_micros() as usize;
     //println!("Elapsed: {:.2?}", elapsed);
-    return (lcsk_poa_score, normal_poa_score, lcsk_poa_time, normal_poa_time, lcsk_poa_memory, normal_poa_memory)
+    return (total_section_score as usize, normal_poa_score, lcsk_poa_time, normal_poa_time, lcsk_poa_memory, normal_poa_memory)
 }
 
 fn lcsk_only_start (seed: usize) {
