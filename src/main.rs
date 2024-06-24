@@ -55,21 +55,15 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
         topo_map.insert(node.index(), incrementing_index);
         incrementing_index += 1;
     }
-    let head_node = topo_indices[0];
-    let end_node = topo_indices.last().unwrap();
-    //println!("Finding graph IDs");
-    //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
+    // find the path in graph (find graph node ids)
     for sequence in string_vec.clone() {
-        //println!("{:?}", sequence);
         let mut error_index = 0;
         loop {
             let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
             if error_index > 10 {
-                //println!("WHAT {} {:?}", sequence, temp_path);
                 break;
             }
             if !error_occured {
-                //println!("{:?}", temp_path);
                 all_paths.push(temp_path);
                 all_sequences.push(temp_sequence);
                 break;
@@ -78,28 +72,22 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             
         }
     }
+    // find the kmer matches and do lcskpgraph
     let now = Instant::now();
-    //println!("Finding kmers");
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
-    //println!("LCSKgraph");
-    //println!("{:?}", kmer_pos_vec);
     let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
     println!("time for lcsk++ {:?}", now.elapsed());
     println!("lcsk++ path length {}", lcsk_path.len());
     let mut total_section_score = 0;
-    // find the anchors here and display to test
     if lcsk_path.len() > 0 {
+        // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
         let (anchors, section_graphs, node_tracker) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices);
-        // order in graph, graph index, query index
         println!("{:?}", anchors);
         println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
-        // get start and end from anchors and do poa for each section
         let mut lcsk_path_index = 0;
-        
         println!("anchors {:?}", anchors);
         for anchor_index in 0..anchors.len() - 1 {
-            
-            // calculate start and end graph and query
+            // query section finder
             let query_start_end = (anchors[anchor_index].2, anchors[anchor_index + 1].2);
             let section_query ;
             let mut cut_off = 0;
@@ -111,9 +99,8 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
                 section_query = y[query_start_end.1..query_start_end.0].to_vec();
                 cut_off = query_start_end.1;
             }
+            // find the sections lcsk path
             let mut section_lcsk_path = vec![];
-            //lcsk path finder!!!!
-            // find the lcsk path index start match
             while lcsk_path_unconverted[lcsk_path_index] <= (anchors[anchor_index].2, anchors[anchor_index].0) {
                 if lcsk_path_index + 1 >= lcsk_path.len() {
                     break;
@@ -123,7 +110,6 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             if lcsk_path_index >= lcsk_path.len() {
                 break;
             }
-            // find the lcsk path index end match, save the path section until end
             while lcsk_path_unconverted[lcsk_path_index] < (anchors[anchor_index + 1].2, anchors[anchor_index + 1].0) {
                 if lcsk_path_index + 1 >= lcsk_path.len() {
                     break;
@@ -131,26 +117,20 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
                 section_lcsk_path.push((lcsk_path[lcsk_path_index].0 - cut_off + 5, node_tracker[lcsk_path[lcsk_path_index].1]));
                 lcsk_path_index += 1;
             }
+            // do poa using the section data
             println!("lcsk path {:?}", section_lcsk_path);
             let section_score = aligner.custom_banded_threaded(&section_query, &section_lcsk_path, band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
             if section_score > 0 {
                 total_section_score += section_score;
             }
-            
             println!("section score {}", section_score);
         }
         println!("total section score {}", total_section_score);
     }
-    
-    //let output_graph = aligner.graph();
-    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-    //lcsk_poa_score = aligner.semiglobal_banded(&y, &lcsk_path, band_size).alignment().score as usize;
     let elapsed = now.elapsed();
     lcsk_poa_memory = aligner.poa.memory_usage as usize;
     lcsk_poa_time = elapsed.as_micros() as usize;
-    //println!("Elapsed: {:.2?}", elapsed);
-    //println!("score {}", lcsk_poa_score);
-   // second try   
+    // normal poa stuff
     let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
     for index in 1..string_vec.len() {
         aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
