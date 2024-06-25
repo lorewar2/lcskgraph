@@ -1,7 +1,7 @@
 use crate::bit_tree::MaxBitTree;
 use fxhash::FxHasher;
 use petgraph::Direction::Incoming;
-use std::cmp::max;
+use std::cmp::{min, max};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use petgraph::Outgoing;
@@ -13,9 +13,10 @@ use petgraph::dot::Dot;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>) {
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>, Vec<u8>) {
     let mut current_cut_limit = cut_limit;
     let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
+    let mut section_queries = vec![];
     // add the head node to first graph
     let mut section_graph: Graph<u8, i32, Directed, usize> = Graph::default();
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
@@ -72,6 +73,12 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 // cut possible
                 // if yes select as anchor
                 anchors.push((pos.1, node_index, pos.0));
+                // make the query stuff
+                let query_start = min(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+                let query_end = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+                let section_query = y[query_start..query_end].to_vec();
+                let mut cut_off = query_start;
+                section_queries.push(section_query);
                 // increase the current cut limit by cutlimit
                 current_cut_limit = max(pos.0, pos.1) + cut_limit;
             }
@@ -116,7 +123,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     // add the end to anchor
     anchors.push((topo_indices.len(), *topo_indices.last().unwrap(), query_length - 1));
     //println!("{:?}", Dot::new(&graph.map(|_, n| (*n) as char, |_, e| *e)));
-    (anchors, section_graphs, node_tracker)
+    (anchors, section_graphs, node_tracker, section_queries)
 }
 
 pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {

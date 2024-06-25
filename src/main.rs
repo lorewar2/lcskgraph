@@ -81,7 +81,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     let mut total_section_score = 0;
     if lcsk_path.len() > 0 {
         // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
-        let (anchors, section_graphs, node_tracker) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices);
+        let (anchors, section_graphs, node_tracker, section_queries) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices);
         println!("{:?}", anchors);
         println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
         let mut lcsk_path_index = 0;
@@ -119,6 +119,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             }
             // do poa using the section data
             println!("lcsk path {:?}", section_lcsk_path);
+            println!("section query here {:?} section query in func {:?}", section_query, section_queries[anchor_index]);
             let section_score = aligner.custom_banded_threaded(&section_query, &section_lcsk_path, band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
             if section_score > 0 {
                 total_section_score += section_score;
