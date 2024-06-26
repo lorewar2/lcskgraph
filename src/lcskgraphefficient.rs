@@ -13,8 +13,7 @@ use petgraph::dot::Dot;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>, Vec<u8>) {
-    let mut current_cut_limit = cut_limit;
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>, query: &Vec<u8>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>, Vec<Vec<u8>>) {    let mut current_cut_limit = cut_limit;
     let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
     let mut section_queries = vec![];
     // add the head node to first graph
@@ -76,7 +75,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 // make the query stuff
                 let query_start = min(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
                 let query_end = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
-                let section_query = y[query_start..query_end].to_vec();
+                let section_query = query[query_start..query_end].to_vec();
                 let mut cut_off = query_start;
                 section_queries.push(section_query);
                 // increase the current cut limit by cutlimit
@@ -119,6 +118,11 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
         
     }
     println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    // final query section
+    let query_start = min(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+    let query_end = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+    let section_query = query[query_start..query_end].to_vec();
+    section_queries.push(section_query);
     section_graphs.push(section_graph);
     // add the end to anchor
     anchors.push((topo_indices.len(), *topo_indices.last().unwrap(), query_length - 1));
