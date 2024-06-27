@@ -16,6 +16,7 @@ const SEQ_LEN: usize = 10000;
 const BAND_SIZE: usize = 10000;
 const SUB_SECTION_LEN: usize = 1000;
 const MIDDLE_SECTION_LEN: usize = 3162;
+const CUT_LIMIT: usize = 200;
 
 fn main() {
     arg_runner();
@@ -82,7 +83,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     let mut total_section_score = 0;
     if lcsk_path.len() > 0 {
         // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
-        let (anchors, section_graphs, node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices, &y);
+        let (anchors, section_graphs, node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, CUT_LIMIT,  y.len(), topo_indices, &y);
         println!("{:?}", anchors);
         println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
         println!("anchors {:?}", anchors);
@@ -91,7 +92,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
             if section_score > 0 {
                 total_section_score += section_score;
             }
-            println!("section score {}", section_score);
+            println!("section score {} section query len {} section graph len {}", section_score, section_queries[anchor_index].len(), section_graphs[anchor_index].node_count());
         }
         println!("total section score {}", total_section_score);
     }

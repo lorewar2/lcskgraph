@@ -23,6 +23,8 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     let mut section_graph: Graph<u8, i32, Directed, usize> = Graph::default();
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
     let mut this_is_head_node = true;
+    let mut cut_fail_times = 0;
+    let mut cut_fail_limit = 50;
     let section_head_node = section_graph.add_node(graph.raw_nodes()[topo_indices[0]].weight);
     node_tracker[topo_indices[0]] = section_head_node.index();
     let mut topo_indices_index = 0;
@@ -63,11 +65,15 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
             topo_indices_index += 1;
         }
         // go through the ascending path until we hit limit
-        if (pos.0 > current_cut_limit) && (pos.1 > current_cut_limit) {
+        if pos.1 > current_cut_limit {
             println!("CURRENT CUT LIMIT {} pos0 {} pos1 {}", current_cut_limit, pos.0, pos.1);
             // add the current node and add the edges from previous nodes
             //println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
-            if try_to_make_the_cut(graph, node_index, number_of_sequences) {
+            let mut temp_num_seq = number_of_sequences;
+            if cut_fail_times >= cut_fail_limit {
+                temp_num_seq = number_of_sequences - 1;
+            }
+            if try_to_make_the_cut(graph, node_index, temp_num_seq) {
                 // put the graph in vector and make new graph
                 //println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
                 section_graphs.push(section_graph);
@@ -84,25 +90,27 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 let section_query = query[query_start..query_end].to_vec();
                 query_cut_off_for_lcsk = query_start;
                 section_queries.push(section_query);
+                cut_fail_times = 0;
                 // increase the current cut limit by cutlimit
-                current_cut_limit = max(pos.0, pos.1) + cut_limit;
+                current_cut_limit = pos.1 + cut_limit;
             }
             else {
                 // do nothing
                 println!("Cut failed");
+                cut_fail_times += 1;
                 // cut not possible
                 // if not go to the next node increase the current cutlimit by 1
-                current_cut_limit = max(pos.0, pos.1) + 1;
+                current_cut_limit = pos.1 + 1;
             }
         }
         // if a cut is made dont put that lcsk path to lcsk path
         if cut_is_made_at_this_point == false {
-            println!("THis is run!!!");
+            //println!("THis is run!!!");
             // put the query point and graph point in the temp lcsk vec if the cut was not made
             temp_section_lcsk.push((original_path[index].0, node_tracker[node_index]));
         }
         else {
-            println!("ADD IS RUN");
+            //println!("ADD IS RUN");
             // if the cut is made put it in the section lcsks vec
             // subtract the cut off from all query points
             let mut filtered_section_lcsk = vec![];
@@ -160,8 +168,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
         }
     }
     section_lcsks.push(filtered_section_lcsk);
-    println!("SECTION LCSK {:?}", section_lcsks);
-
+    //println!("SECTION LCSK {:?}", section_lcsks);
     //println!("{:?}", Dot::new(&graph.map(|_, n| (*n) as char, |_, e| *e)));
     (anchors, section_graphs, node_tracker, section_queries, section_lcsks)
 }
