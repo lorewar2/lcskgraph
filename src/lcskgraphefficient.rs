@@ -24,7 +24,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
     let mut this_is_head_node = true;
     let mut cut_fail_times = 0;
-    let mut cut_fail_limit = 50;
+    let cut_fail_limit = 1000; // for pacbio, to run cleanly lol
     let section_head_node = section_graph.add_node(graph.raw_nodes()[topo_indices[0]].weight);
     node_tracker[topo_indices[0]] = section_head_node.index();
     let mut topo_indices_index = 0;
@@ -66,7 +66,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
         }
         // go through the ascending path until we hit limit
         if pos.1 > current_cut_limit {
-            println!("CURRENT CUT LIMIT {} pos0 {} pos1 {}", current_cut_limit, pos.0, pos.1);
+            //println!("CURRENT CUT LIMIT {} pos0 {} pos1 {}", current_cut_limit, pos.0, pos.1);
             // add the current node and add the edges from previous nodes
             //println!("current pos graph order {} node index {} query {}", pos.1, node_index, pos.0);
             let mut temp_num_seq = number_of_sequences;
@@ -78,7 +78,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 //println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
                 section_graphs.push(section_graph);
                 section_graph = Graph::default();
-                println!("Cut successful");
+                //println!("Cut successful");
                 cut_is_made_at_this_point = true;
                 this_is_head_node = true;
                 // cut possible
@@ -96,7 +96,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
             }
             else {
                 // do nothing
-                println!("Cut failed");
+                //println!("Cut failed");
                 cut_fail_times += 1;
                 // cut not possible
                 // if not go to the next node increase the current cutlimit by 1

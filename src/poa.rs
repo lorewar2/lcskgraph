@@ -292,6 +292,14 @@ pub struct Aligner {
 
 impl Aligner{
     /// Create new instance.
+    pub fn empty (match_score: i32, mismatch_score: i32, gap_open_score: i32, x_clip: i32, y_clip: i32, _band_size: i32) -> Self {
+        let reference = &vec![65];
+        Aligner {
+            traceback: Traceback::new(),
+            query: reference.to_vec(),
+            poa: Poa::from_string(match_score, mismatch_score, gap_open_score, x_clip, y_clip, reference),
+        }
+    }
     pub fn new(match_score: i32, mismatch_score: i32, gap_open_score: i32, reference: &Vec<u8>, x_clip: i32, y_clip: i32, _band_size: i32) -> Self {
         Aligner {
             traceback: Traceback::new(),
@@ -455,10 +463,10 @@ impl Aligner{
         self
     }
 
-    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, hash_map: &HashMap<usize, usize>, section_graph: Graph<u8, i32, Directed, usize>) -> &mut Self {
+    pub fn custom_banded_threaded(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, section_graph: Graph<u8, i32, Directed, usize>) -> &mut Self {
         self.poa.graph = section_graph;
         self.query = query.to_vec();
-        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth,hash_map);
+        self.traceback = self.poa.custom_banded_threaded_section(query, lcsk_path, bandwidth);
         self
     }
     /// Return alignment graph.
@@ -909,7 +917,7 @@ impl Poa{
         traceback
     }
     // need to convert this shit to use and ascending topo indices instead topo indices, extra input maybe just the hashmap
-    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize, hash_map: &HashMap<usize, usize>) -> Traceback {
+    pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize) -> Traceback {
         assert!(self.graph.node_count() != 0);
         // dimensions of the traceback matrix
         let (m, n) = (self.graph.node_count(), query.len());
