@@ -76,51 +76,18 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize) ->
     let now = Instant::now();
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
     let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
+    println!("LCSK PATH {:?}", lcsk_path);
     println!("time for lcsk++ {:?}", now.elapsed());
     println!("lcsk++ path length {}", lcsk_path.len());
     let mut total_section_score = 0;
     if lcsk_path.len() > 0 {
         // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
-        let (anchors, section_graphs, node_tracker, section_queries) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices, &y);
+        let (anchors, section_graphs, node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, 10,  y.len(), topo_indices, &y);
         println!("{:?}", anchors);
         println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
-        let mut lcsk_path_index = 0;
         println!("anchors {:?}", anchors);
         for anchor_index in 0..anchors.len() - 1 {
-            // query section finder
-            let query_start_end = (anchors[anchor_index].2, anchors[anchor_index + 1].2);
-            let section_query ;
-            let mut cut_off = 0;
-            if query_start_end.1 > query_start_end.0 {
-                section_query = y[query_start_end.0..query_start_end.1].to_vec();
-                cut_off = query_start_end.0;
-            }
-            else {
-                section_query = y[query_start_end.1..query_start_end.0].to_vec();
-                cut_off = query_start_end.1;
-            }
-            // find the sections lcsk path
-            let mut section_lcsk_path = vec![];
-            while lcsk_path_unconverted[lcsk_path_index] <= (anchors[anchor_index].2, anchors[anchor_index].0) {
-                if lcsk_path_index + 1 >= lcsk_path.len() {
-                    break;
-                }
-                lcsk_path_index += 1;
-            }
-            if lcsk_path_index >= lcsk_path.len() {
-                break;
-            }
-            while lcsk_path_unconverted[lcsk_path_index] < (anchors[anchor_index + 1].2, anchors[anchor_index + 1].0) {
-                if lcsk_path_index + 1 >= lcsk_path.len() {
-                    break;
-                }
-                section_lcsk_path.push((lcsk_path[lcsk_path_index].0 - cut_off + 5, node_tracker[lcsk_path[lcsk_path_index].1]));
-                lcsk_path_index += 1;
-            }
-            // do poa using the section data
-            println!("lcsk path {:?}", section_lcsk_path);
-            println!("section query here {:?} section query in func {:?}", section_query, section_queries[anchor_index]);
-            let section_score = aligner.custom_banded_threaded(&section_queries[anchor_index], &section_lcsk_path, band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
+            let section_score = aligner.custom_banded_threaded(&section_queries[anchor_index], &section_lcsks[anchor_index], band_size, &topo_map, section_graphs[anchor_index].clone()).alignment().score;
             if section_score > 0 {
                 total_section_score += section_score;
             }
