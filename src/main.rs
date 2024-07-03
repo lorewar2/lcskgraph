@@ -11,6 +11,8 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 use std::env;
 use std::thread;
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
@@ -317,7 +319,6 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
         temp_reads.push(reads[4].clone());
         //println!("{:?}", temp_reads.len());
         new_read_set.push(temp_reads);
-
     }
     let mut normal_sum = (0, 0, 0);
     let mut threaded_sum = (0, 0, 0);
@@ -325,11 +326,30 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
-        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("data/pacbio.fa")
+        .unwrap();
+        for (index2, string) in string_vec.iter().enumerate() {
+            if let Err(e) = writeln!(file, ">Pacbio-{}-{}", index, index2) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
+            if let Err(e) = writeln!(file, "{}", string) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
+        }
+        
+        let normal: (usize, usize, usize) = (0, 0, 0);
+        let lcsk: (usize, usize, usize) = (0, 0, 0);
+        let threaded: (usize, usize, usize) = (0, 0, 0);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
+        
         println!("Read Number {}", index + 1);
         println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
         println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
@@ -349,7 +369,25 @@ fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_o
     for seed in 0..num_of_iter {
         println!("Progress {:.2}%", ((seed * 100) as f32 / num_of_iter as f32));
         let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
-        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("data/synthetic10.fa")
+        .unwrap();
+        for (index, string) in string_vec.iter().enumerate() {
+            if let Err(e) = writeln!(file, ">Synthetic10-{}-{}", seed, index) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
+            if let Err(e) = writeln!(file, "{}", string) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
+        }
+        
+        let normal: (usize, usize, usize) = (0, 0, 0);
+        let lcsk: (usize, usize, usize) = (0, 0, 0);
+        let threaded: (usize, usize, usize) = (0, 0, 0);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
