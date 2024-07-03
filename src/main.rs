@@ -93,7 +93,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
             let section_query = section_queries[anchor_index].clone();
             let section_lcsk = section_lcsks[anchor_index].clone();
             let section_graph = section_graphs[anchor_index].clone();
-            println!("section query len {} section graph len {}", section_query.len(), section_graph.node_count());
+            //println!("section query len {} section graph len {}", section_query.len(), section_graph.node_count());
             children.push(thread::spawn(move || {
                 let mut aligner = Aligner::empty(2, -2, -2, 0, 0, band_size as i32);
                 let score = aligner.custom_banded_threaded(&section_query, &section_lcsk, band_size, section_graph).alignment().score;
@@ -104,11 +104,11 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
         // get tall the section scores and add them up
         for child_index in 0..children.len() {
             let result = children.pop().unwrap().join().unwrap();
-            println!("section child {} score {} memory {}", child_index, result.0, result.1);
+            //println!("section child {} score {} memory {}", child_index, result.0, result.1);
             total_section_score += result.0;
             total_section_memory += result.1;
         }
-        println!("total section score {}", total_section_score);
+        //println!("total section score {}", total_section_score);
     }
     let elapsed = now.elapsed();
     threaded_stat = (total_section_score as usize, elapsed.as_micros() as usize + only_lcsk_time, total_section_memory as usize);
@@ -331,13 +331,13 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
         println!("Read Number {}", index + 1);
-        println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
-        println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
         println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
     println!("=======================\nSummary Average of {} runs", num_of_iter);
-    println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
-    println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
     println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
 }
 
@@ -355,13 +355,13 @@ fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_o
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
         println!("Seed {}", seed);
-        println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
-        println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
         println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
     println!("=======================\nSummary Average of {} runs", num_of_iter);
-    println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
-    println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
     println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
