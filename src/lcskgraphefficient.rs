@@ -153,7 +153,13 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     }
     //println!("{:?}", Dot::new(&section_graph.map(|_, n| (*n) as char, |_, e| *e)));
     // final query section
-    let query_start = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+    let query_start;
+    if anchors.len() > 2 {
+        query_start = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
+    }
+    else {
+        query_start = 0;
+    }
     let query_end = query.len() - 1;
     let section_query = query[query_start..query_end].to_vec();
     section_queries.push(section_query);
