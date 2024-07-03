@@ -22,27 +22,22 @@ fn main() {
     arg_runner();
 }
 
-fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cut_limit: usize) -> (usize, usize, usize, usize, usize, usize){
+fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cut_limit: usize) -> ((usize, usize, usize), (usize, usize, usize), (usize, usize, usize)){
     //for evaluating varibles
-    let lcsk_poa_score: usize;
-    let normal_poa_score;
-    let lcsk_poa_time;
-    let normal_poa_time;
-    let lcsk_poa_memory;
-    let normal_poa_memory;
+    let normal_stat: (usize, usize, usize); // score time memory
+    let lcsk_stat: (usize, usize, usize);
+    let threaded_stat: (usize, usize, usize);
+    let only_lcsk_time;
     let mut children = vec![];
-
+    // Make the aligner using full poa and first 2 reads
     let mut string_vec = reads.clone();
     let x = string_vec[0].as_bytes().to_vec();
     let y = string_vec.pop().unwrap().as_bytes().to_vec();
-
-    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, band_size as i32);
+    let mut original_aligner = Aligner::new(2, -2, -2, &x, 0, 0, band_size as i32);
     for index in 1..string_vec.len() {
-        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
+        original_aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
     }
-    
-    let output_graph = aligner.graph();
-    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
+    let output_graph = original_aligner.graph();
     let mut all_paths: Vec<Vec<usize>> = vec![];
     let mut all_sequences: Vec<Vec<u8>> = vec![];
 
@@ -74,21 +69,26 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
             
         }
     }
-    // find the kmer matches and do lcskpgraph
+    // LCSK PATH
     let now = Instant::now();
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
     let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
-    //println!("LCSK PATH {:?}", lcsk_path);
-    println!("time for lcsk++ {:?}", now.elapsed());
-    //println!("lcsk++ path length {}", lcsk_path.len());
+    only_lcsk_time = now.elapsed().as_micros() as usize;
+    println!("time for lcsk++ {:?}", only_lcsk_time);
+    // NORMAL LCSK POA
+    let mut lcsk_aligner = original_aligner.clone();
+    let now = Instant::now();
+    let score = lcsk_aligner.custom_banded(&y, &lcsk_path, band_size).alignment().score;
+    let time = now.elapsed().as_micros() as usize;
+    let memory = lcsk_aligner.poa.memory_usage as usize;
+    lcsk_stat = (score as usize, time + only_lcsk_time, memory);
+    // THREADED LCSK POA
+    let now = Instant::now();
     let mut total_section_score = 0;
     let mut total_section_memory = 0;
     if lcsk_path.len() > 0 {
         // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
-        let (anchors, section_graphs, node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, cut_limit,  y.len(), topo_indices, &y);
-        //println!("{:?}", anchors);
-        //println!("NUMBER OF SECTION GRAPHS {}", section_graphs.len());
-        //println!("anchors {:?}", anchors);
+        let (anchors, section_graphs, _node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, output_graph, cut_limit,  y.len(), topo_indices, &y);
         for anchor_index in 0..anchors.len() - 1 {
             let section_query = section_queries[anchor_index].clone();
             let section_lcsk = section_lcsks[anchor_index].clone();
@@ -111,126 +111,15 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
         println!("total section score {}", total_section_score);
     }
     let elapsed = now.elapsed();
-    lcsk_poa_memory = total_section_memory as usize;
-    lcsk_poa_time = elapsed.as_micros() as usize;
-    // normal poa stuff
-    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, 1);
-    for index in 1..string_vec.len() {
-        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-    }
+    threaded_stat = (total_section_score as usize, elapsed.as_micros() as usize + only_lcsk_time, total_section_memory as usize);
+    // NORMAL POA
     let now = Instant::now();
-    normal_poa_score = aligner.semiglobal(&y).alignment().score as usize;
+    let score = original_aligner.semiglobal(&y).alignment().score as usize;
     let elapsed = now.elapsed();
-    normal_poa_memory = aligner.poa.memory_usage as usize;
-    //println!("score {}", normal_poa_score);
-    normal_poa_time = elapsed.as_micros() as usize;
-    //println!("Elapsed: {:.2?}", elapsed);
-    return (total_section_score as usize, normal_poa_score, lcsk_poa_time, normal_poa_time, lcsk_poa_memory, normal_poa_memory)
-}
-
-fn lcsk_only_start (seed: usize) {
-    let mut string_vec = get_random_sequences_from_generator(SEQ_LEN, 3, seed);
-    let x = string_vec[0].as_bytes().to_vec();
-    let y = string_vec.pop().unwrap().as_bytes().to_vec();
-
-    let mut aligner = Aligner::new(2, -2, -2, &x, 0, 0, BAND_SIZE as i32);
-    for index in 1..string_vec.len() {
-        aligner.global(&string_vec[index].as_bytes().to_vec()).add_to_graph();
-    }
-    let output_graph = aligner.graph();
-    //println!("{:?}", Dot::new(&output_graph.map(|_, n| (*n) as char, |_, e| *e)));
-    let mut all_paths: Vec<Vec<usize>> = vec![];
-    let mut all_sequences: Vec<Vec<u8>> = vec![];
-
-    // get topology ordering
-    let mut topo = Topo::new(&output_graph);
-    // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
-    let mut topo_indices = vec![];
-    let mut topo_map = HashMap::new();
-    let mut incrementing_index: usize = 0;
-    while let Some(node) = topo.next(&output_graph) {
-        topo_indices.push(node.index());
-        topo_map.insert(node.index(), incrementing_index);
-        incrementing_index += 1;
-    }
-    //println!("Finding graph IDs");
-    //dfs_get_sequence_paths(0,  string_vec.clone(), output_graph, topo_indices[0], vec![], vec![], &mut all_paths, &mut all_sequences, &topo_map);
-    for sequence in string_vec.clone() {
-        //println!("{:?}", sequence);
-        let mut error_index = 0;
-        loop {
-            let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (sequence.as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
-            if error_index > 10 {
-                //println!("WHAT {} {:?}", sequence, temp_path);
-                break;
-            }
-            if !error_occured {
-                //println!("{:?}", temp_path);
-                all_paths.push(temp_path);
-                all_sequences.push(temp_sequence);
-                break;
-            }
-            error_index += 1;
-        }
-    }
-    let now = Instant::now();
-    // find the kmers in top section 
-    //println!("Finding kmers");
-
-    // find matches in top section (full horizontal query, subsection length verticle graph)
-    let (top_path, top_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, SEQ_LEN, SUB_SECTION_LEN);
-
-    // find matches in left section (full verticle graph, subsection length query)
-    let (left_path, left_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, SUB_SECTION_LEN, SUB_SECTION_LEN);
-    // find matches in middle section (middle section length graph, middle section length query)
-    let (middle_path, middle_score) = get_lcsk_path_from_section (&y, &all_sequences, &all_paths, KMER_SIZE, &topo_indices, MIDDLE_SECTION_LEN, MIDDLE_SECTION_LEN);
-    // get the scores from all three and use the one with highest score
-    println!("top {} {:?}", top_score, top_path[0]);
-    println!("left{} {:?}", left_score, left_path[0]);
-    println!("middle{} {:?}", middle_score, middle_path[0]);
-
-    // and only use the start of kmer
-    //let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, KMER_SIZE);
-    //println!("LCSKgraph");
-    //println!("{:?}", kmer_pos_vec);
-    //let (lcsk_path, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), KMER_SIZE, kmer_graph_path, &topo_indices);
-    //println!("new with multi window {:?}", lcsk_path[0]);
-    let elapsed = now.elapsed();
-    println!("new TIME TAKEN {:?}", elapsed);
-}
-
-fn get_lcsk_path_from_section (query: &[u8], graph_sequences: &Vec<Vec<u8>>, graph_ids: &Vec<Vec<usize>>, k: usize, topo_map: &Vec<usize>, required_query_len: usize, required_graph_len: usize) -> (Vec<(usize, usize)>, u32){
-    // cut the query
-    let new_query;
-    if required_query_len < query.len() {
-        new_query = query[0..required_query_len].to_vec();
-    }
-    else {
-        new_query = query.to_vec();
-    }
-    // cut the sequences and paths
-    let mut new_sequences = vec![];
-    let mut new_graph_ids = vec![];
-    for (index, sequence) in graph_sequences.iter().enumerate() {
-        let new_graph_sequence;
-        let new_graph_id;
-        if required_graph_len < sequence.len() {
-            new_graph_sequence = sequence[0..required_graph_len].to_vec();
-            new_graph_id = graph_ids[index][0..required_graph_len].to_vec();
-        }
-        else {
-            new_graph_sequence = sequence.to_vec();
-            new_graph_id = graph_ids[index].to_vec();
-        }
-        new_sequences.push(new_graph_sequence);
-        new_graph_ids.push(new_graph_id);
-    }
-    // get the results
-    let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&new_query, &new_sequences, &new_graph_ids, k);
-
-    let (lcsk_path,lcsk_path_unconverted, k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, new_sequences.len(), k, kmer_graph_path, &topo_map);
-
-    return (lcsk_path, k_new_score);
+    let memory = original_aligner.poa.memory_usage as usize;
+    let time = elapsed.as_micros() as usize;
+    normal_stat = (score, memory, time);
+    return (normal_stat, lcsk_stat, threaded_stat);
 }
 
 fn arg_runner() {
@@ -430,35 +319,50 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
         new_read_set.push(temp_reads);
 
     }
-    let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
-    let mut poa_stuff_sum = (0, 0, 0);
+    let mut normal_sum = (0, 0, 0);
+    let mut threaded_sum = (0, 0, 0);
+    let mut lcsk_sum = (0, 0, 0);
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
-        let results = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
-        println!("Read number {}\nNormal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB\nLcsk poa \tScore: {} \tTime: {}meus \tMemory usage: {}KB", index, results.1, results.3, results.5, results.0, results.2, results.4);
-        lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
-        poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
+        normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
+        lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
+        threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
+        println!("Read Number {}", index + 1);
+        println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
-    println!("=======================\nSummary Average of {} runs \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", num_of_iter, poa_stuff_sum.0 / num_of_iter, poa_stuff_sum.1 / num_of_iter, poa_stuff_sum.2/ num_of_iter, lcsk_stuff_sum.0/ num_of_iter, lcsk_stuff_sum.1/ num_of_iter, lcsk_stuff_sum.2/ num_of_iter);
-    //io::stdin().read_line(&mut String::new()).unwrap();
+    println!("=======================\nSummary Average of {} runs", num_of_iter);
+    println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
 }
 
 fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_of_iter: usize, band_size: usize, cut_limit: usize) {
     println!("Processing Synthetic Data");
-    let mut lcsk_stuff_sum = (0, 0, 0); // score time memory
-    let mut poa_stuff_sum = (0, 0, 0);
+    let mut normal_sum = (0, 0, 0);
+    let mut threaded_sum = (0, 0, 0);
+    let mut lcsk_sum = (0, 0, 0);
     for seed in 0..num_of_iter {
         println!("Progress {:.2}%", ((seed * 100) as f32 / num_of_iter as f32));
         let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
-        let results = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
-        println!("Seed {}\nNormal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB\nLcsk poa \tScore: {} \tTime: {}meus \tMemory usage: {}KB", seed, results.1, results.3, results.5, results.0, results.2, results.4);
-        lcsk_stuff_sum = (lcsk_stuff_sum.0 + results.0, lcsk_stuff_sum.1 + results.2, lcsk_stuff_sum.2 + results.4);
-        poa_stuff_sum = (poa_stuff_sum.0 + results.1, poa_stuff_sum.1 + results.3, poa_stuff_sum.2 + results.5);
+        normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
+        lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
+        threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
+        println!("Seed {}", seed);
+        println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
-    println!("=======================\nSummary Average of {} runs \nNormal poa\n\tScore: {}\n\tTime: {}meus\n\tMemory_usage: {}KB\nLcsk poa\n\tScore: {}\n\tTime: {}meus\n\tMemory usage: {}KB\n=======================\n", num_of_iter, poa_stuff_sum.0 / num_of_iter, poa_stuff_sum.1 / num_of_iter, poa_stuff_sum.2/ num_of_iter, lcsk_stuff_sum.0/ num_of_iter, lcsk_stuff_sum.1/ num_of_iter, lcsk_stuff_sum.2/ num_of_iter);
+    println!("=======================\nSummary Average of {} runs", num_of_iter);
+    println!("Normal poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
 
