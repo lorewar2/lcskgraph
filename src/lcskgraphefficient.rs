@@ -8,7 +8,6 @@ use petgraph::Outgoing;
 use petgraph::graph::NodeIndex;
 use petgraph::{Directed, Graph};
 use itertools::Itertools;
-use petgraph::dot::Dot;
 
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -18,7 +17,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     let mut section_queries = vec![];
     let mut section_lcsks = vec![];
     let mut temp_section_lcsk = vec![];
-    let mut query_cut_off_for_lcsk = 0;
+    let mut query_cut_off_for_lcsk;
     // add the head node to first graph
     let mut section_graph: Graph<u8, i32, Directed, usize> = Graph::default();
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];

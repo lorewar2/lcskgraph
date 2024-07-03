@@ -39,7 +39,6 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::Topo;
 use std::mem;
 use petgraph::{Directed, Graph, Incoming};
-use std::{collections::HashMap};
 
 pub const MIN_SCORE: i32 = -858_993_459; // negative infinity; see alignment/pairwise/mod.rs
 pub type POAGraph = Graph<u8, i32, Directed, usize>;

@@ -11,8 +11,6 @@ use std::time::Instant;
 use rust_htslib::{bam, bam::Read};
 use std::env;
 use std::thread;
-use std::fs::OpenOptions;
-use std::io::prelude::*;
 
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
@@ -76,7 +74,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
     let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&y, &all_sequences, &all_paths, kmer_size);
     let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
     only_lcsk_time = now.elapsed().as_micros() as usize;
-    println!("time for lcsk++ {:?}", only_lcsk_time);
+    //println!("time for lcsk++ {:?}", only_lcsk_time);
     // NORMAL LCSK POA
     let mut lcsk_aligner = original_aligner.clone();
     let now = Instant::now();
@@ -104,7 +102,7 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
             }));
         }
         // get tall the section scores and add them up
-        for child_index in 0..children.len() {
+        for _child_index in 0..children.len() {
             let result = children.pop().unwrap().join().unwrap();
             //println!("section child {} score {} memory {}", child_index, result.0, result.1);
             total_section_score += result.0;
@@ -319,6 +317,7 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
         temp_reads.push(reads[4].clone());
         //println!("{:?}", temp_reads.len());
         new_read_set.push(temp_reads);
+
     }
     let mut normal_sum = (0, 0, 0);
     let mut threaded_sum = (0, 0, 0);
@@ -326,30 +325,11 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open("data/pacbio.fa")
-        .unwrap();
-        for (index2, string) in string_vec.iter().enumerate() {
-            if let Err(e) = writeln!(file, ">Pacbio-{}-{}", index, index2) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-            if let Err(e) = writeln!(file, "{}", string) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-        
-        let normal: (usize, usize, usize) = (0, 0, 0);
-        let lcsk: (usize, usize, usize) = (0, 0, 0);
-        let threaded: (usize, usize, usize) = (0, 0, 0);
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
-        
         println!("Read Number {}", index + 1);
         println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
         println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
@@ -369,25 +349,7 @@ fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_o
     for seed in 0..num_of_iter {
         println!("Progress {:.2}%", ((seed * 100) as f32 / num_of_iter as f32));
         let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open("data/synthetic10.fa")
-        .unwrap();
-        for (index, string) in string_vec.iter().enumerate() {
-            if let Err(e) = writeln!(file, ">Synthetic10-{}-{}", seed, index) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-            if let Err(e) = writeln!(file, "{}", string) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-        
-        let normal: (usize, usize, usize) = (0, 0, 0);
-        let lcsk: (usize, usize, usize) = (0, 0, 0);
-        let threaded: (usize, usize, usize) = (0, 0, 0);
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
