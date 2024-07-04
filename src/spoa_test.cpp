@@ -20,34 +20,39 @@ int main(int argc, char** argv) {
         std::cerr << "Unable to open file: " << filename << std::endl;
         return 1; // Return an error code
     }
+    std::vector<std::vector<std::string>> sequences_vec;
     std::vector<std::string> sequences;
     std::string line; // Temporary string to hold each line
     int line_index = 0;
     // Read the file line by line
     while (std::getline(file, line)) {
-        if line_index % 2 == 1 {
+        if (line_index % 2 == 1) {
             sequences.push_back(line); // Add each line to the vector
+            if (sequences.size() >= 3) {
+                sequences_vec.push_back(sequences);
+                sequences.clear();
+            }
         }
         line_index++;
     }
     file.close(); // Close the file
+    for(int i = 0; i < sequences_vec.size(); i++) {
+        auto alignment_engine = spoa::AlignmentEngine::Create(spoa::AlignmentType::kNW, 2, -2, -2);  // linear gaps
+        spoa::Graph graph{};
 
-    auto alignment_engine = spoa::AlignmentEngine::Create(spoa::AlignmentType::kNW, 2, -2, -2);  // linear gaps
-    spoa::Graph graph{};
-
-    int run_index = 0;
-    for (const auto& it : sequences) {
-        auto alignment = alignment_engine->Align(it, graph);
-        graph.AddAlignment(alignment, it);
-        if run_index == 1 { //start time measurement
-            std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        int run_index = 0;
+        std::chrono::steady_clock::time_point begin;
+        for (const auto& it : sequences_vec[i]) {
+            auto alignment = alignment_engine->Align(it, graph);
+            graph.AddAlignment(alignment, it);
+            if (run_index == 1) { //start time measurement
+                begin = std::chrono::steady_clock::now();
+            }
+            run_index++;
         }
-        run_index++;
-    }
 
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
-    auto consensus = graph.GenerateConsensus();
-    std::cerr << ">Consensus LN:i:" << consensus.size() << std::endl << consensus << std::endl;
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        std::cout << i << "iter, time elasped = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
+    }
     return 0;
 }
