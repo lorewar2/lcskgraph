@@ -243,7 +243,7 @@ fn arg_runner() {
             run_pacbio_data_benchmark(kmer_size, number_of_iter, band_size, input_bam_path, cut_limit);
         }
         else {
-            make_read_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
+            make_output_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
             println!("SS");
         }
     }
@@ -265,7 +265,48 @@ fn help() {
     exit(0x0100);
 }
 
-fn make_read_file_from_subread_bam (_kmer_size: usize, _band_size: usize, _input_path: String, _output_path: String) {
+fn make_output_file_from_subread_bam (kmer_size: usize, band_size: usize, input_path: String, output_path: String) {
+    let read_file_dir = input_path;
+    // get all the data from bam file
+    let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
+    let mut current_set = "".to_string();
+    let mut temp_read = vec![];
+    for record_option in bam.records().into_iter() {
+        match record_option {                                                                                                       
+            Ok(x) => {                                                                                                       
+                let record = x;                                                                                                         
+                let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
+                if current_set == "".to_string() {
+                    //println!("Start here");
+                    current_set = record_set;
+                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
+                    //println!()
+                }
+                else if current_set == record_set {
+                    //println!("Just adding read");
+                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
+                }
+                else {
+                    //println!("Read set complete onto the next");
+                    current_set = record_set;
+                    // process here
+                    process_the_reads_get_consensus_and_save_in_fa (temp_read, output_path, kmer_size, band_size);
+                    temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
+                }
+            },
+            Err(_) => {
+                break;
+            }
+        }
+    }
+}
+
+fn process_the_reads_get_consensus_and_save_in_fa (input_reads: Vec<String>, output_fa: String, kmer_size: usize, band_size: usize) {
+    // run lcskpoa with the strings 
+
+    // get consensus 
+
+    // write it to fa file
 
 }
 
