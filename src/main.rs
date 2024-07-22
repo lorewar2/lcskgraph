@@ -13,6 +13,7 @@ use std::env;
 use std::thread;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::fs::read_to_string;
 
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
@@ -22,6 +23,161 @@ const MIDDLE_SECTION_LEN: usize = 3162;
 
 fn main() {
     arg_runner();
+}
+
+fn arg_runner() {
+    // get the arguments 1. num of threads 2. read bam
+    // s for synthetic test p for pacbio test s for subread processing
+    // kmer size band size 
+    let mut synthetic_data = false;
+    let mut benchmarking = false; // only valid for pacbio data
+    let mut kmer_size: usize = 10;
+    let mut band_size: usize = 200;
+    let mut sequence_length: usize = 10000;
+    let mut number_of_iter: usize = 0; // required for benchmarking
+    let mut input_bam_path: String = "data/sample_pacbio.bam".to_string();
+    let mut output_bam_path: String = "output/read_pacbio.bam".to_string();
+    let mut cut_limit: usize = 1000;
+
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match &arg[..] {
+            "-h" | "--help" => help(),
+            "--version" => {
+                println!("LCSKGRAPH++ 1.0.0");
+            }
+            "-s" => {
+                println!("Synthetic data mode");
+                synthetic_data = true;
+            }
+            "-p" => {
+                println!("Pacbio data mode");
+                synthetic_data = false;
+                if let Some(in_string) = args.next() {
+                    input_bam_path = in_string;
+                } else {
+                    panic!("No input bam/fa file specified!");
+                }
+                if let Some(out_string) = args.next() {
+                    output_bam_path = out_string;
+                } else {
+                    panic!("No output write file specified!");
+                }
+            }
+            "-t" => {
+                println!("Benchmarking..");
+                benchmarking = true;
+                if let Some(i_string) = args.next() {
+                    number_of_iter = match i_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -i")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -i");
+                }
+            }
+            "-k" => {
+                if let Some(k_string) = args.next() {
+                    kmer_size = match k_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -k")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -k.");
+                }
+            }
+            "-b" => {
+                if let Some(b_string) = args.next() {
+                    band_size = match b_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -b")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -b");
+                }
+            }
+            "-c" => {
+                if let Some(c_string) = args.next() {
+                    cut_limit = match c_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -b")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -b");
+                }
+            }
+            "-l" => {
+                if let Some(l_string) = args.next() {
+                    sequence_length = match l_string.parse::<usize>() {
+                        Ok(x) => {x},
+                        Err(_) => {panic!("Invalid value for -l")},
+                    }
+                } else {
+                    panic!("No value specified for parameter -l");
+                }
+            }
+            _ => {
+                if arg.starts_with('-') {
+                    println!("Unknown argument {}", arg);
+                } else {
+                    println!("Unknown positional argument {}", arg);
+                }
+            }
+        }
+    }
+    // check for synthetic and run
+    if synthetic_data == true {
+        if number_of_iter == 0 {
+            panic!("Number of iterations can't be 0 for synthetic data benchmarking!");
+        }
+        if benchmarking == false {
+            panic!("Synthetic data can only be run in benchmarking mode!");
+        }
+        println!("Benchmarking Synthetic data for {} iterations, sequences of length: {} using k: {} band size: {}", number_of_iter, sequence_length, kmer_size, band_size);
+        run_synthetic_data_benchmark(kmer_size, sequence_length, number_of_iter, band_size, cut_limit);
+    }
+    // check for pacbio and run
+    if synthetic_data == false {
+        if benchmarking == true {
+            if number_of_iter == 0 {
+                panic!("Number of iterations can't be 0 for pacbio data benchmarking!");
+            }
+            println!("Benchmarking Pacbio data {} for {} iterations, using k: {} band size: {}", input_bam_path, number_of_iter, kmer_size, band_size);
+            run_pacbio_data_benchmark(kmer_size, number_of_iter, band_size, input_bam_path, cut_limit);
+        }
+        else {
+            // check here the file is fa or bam
+            let file_extension = input_bam_path.split(".").last().unwrap();
+            if file_extension == "bam" {
+                make_output_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
+            }
+            else if file_extension == "fa" {
+                make_output_file_from_subread_fa(kmer_size, band_size, input_bam_path, output_bam_path);
+            }
+            else {
+                println!("Unknown input file type!");
+            }
+        }
+    }
+}
+
+fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_path: String, output_path: String) {
+    // get all the data from bam file
+    let mut current_set = "".to_string();
+    let mut temp_read = vec![];
+    for (index, line) in read_to_string(&input_path).unwrap().lines().enumerate() {
+        if index % 2 != 0 {
+            temp_read.push(line.to_string());
+        }
+        else {
+            current_set = line.to_string();
+        }
+    }
+    println!("Processing {} depth {}", input_path, temp_read.len());
+    let now = Instant::now();
+    process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size);
+    let time = now.elapsed().as_micros() as usize;
+    println!("Completed {} elapsed time {}μs", input_path, time);
 }
 
 fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_reads: Vec<String>, output_fa: &String, kmer_size: usize, band_size: usize) {
@@ -107,9 +263,12 @@ fn make_output_file_from_subread_bam (kmer_size: usize, band_size: usize, input_
                 }
                 else {
                     //println!("Read set complete onto the next");
-                    
                     // process here
+                    println!("Processing read {} depth {}", current_set, temp_read.len());
+                    let now = Instant::now();
                     process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size);
+                    let time = now.elapsed().as_micros() as usize;
+                    println!("Completed {} time elapsed {}μs", current_set, time);
                     temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
                     current_set = record_set;
                 }
@@ -221,145 +380,18 @@ fn lcsk_test_pipeline(reads: Vec<String>, kmer_size: usize, band_size: usize, cu
     return (normal_stat, lcsk_stat, threaded_stat);
 }
 
-fn arg_runner() {
-    // get the arguments 1. num of threads 2. read bam
-    // s for synthetic test p for pacbio test s for subread processing
-    // kmer size band size 
-    let mut synthetic_data = false;
-    let mut benchmarking = false; // only valid for pacbio data
-    let mut kmer_size: usize = 10;
-    let mut band_size: usize = 200;
-    let mut sequence_length: usize = 10000;
-    let mut number_of_iter: usize = 0; // required for benchmarking
-    let mut input_bam_path: String = "data/sample_pacbio.bam".to_string();
-    let mut output_bam_path: String = "output/read_pacbio.bam".to_string();
-    let mut cut_limit: usize = 1000;
-
-    let mut args = env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match &arg[..] {
-            "-h" | "--help" => help(),
-            "--version" => {
-                println!("LCSKGRAPH++ 1.0.0");
-            }
-            "-s" => {
-                println!("Synthetic data mode");
-                synthetic_data = true;
-            }
-            "-p" => {
-                println!("Pacbio data mode");
-                synthetic_data = false;
-                if let Some(in_string) = args.next() {
-                    input_bam_path = in_string;
-                } else {
-                    panic!("No input bam file specified!");
-                }
-                if let Some(out_string) = args.next() {
-                    output_bam_path = out_string;
-                } else {
-                    panic!("No output bam file specified!");
-                }
-            }
-            "-t" => {
-                println!("Benchmarking..");
-                benchmarking = true;
-                if let Some(i_string) = args.next() {
-                    number_of_iter = match i_string.parse::<usize>() {
-                        Ok(x) => {x},
-                        Err(_) => {panic!("Invalid value for -i")},
-                    }
-                } else {
-                    panic!("No value specified for parameter -i");
-                }
-            }
-            "-k" => {
-                if let Some(k_string) = args.next() {
-                    kmer_size = match k_string.parse::<usize>() {
-                        Ok(x) => {x},
-                        Err(_) => {panic!("Invalid value for -k")},
-                    }
-                } else {
-                    panic!("No value specified for parameter -k.");
-                }
-            }
-            "-b" => {
-                if let Some(b_string) = args.next() {
-                    band_size = match b_string.parse::<usize>() {
-                        Ok(x) => {x},
-                        Err(_) => {panic!("Invalid value for -b")},
-                    }
-                } else {
-                    panic!("No value specified for parameter -b");
-                }
-            }
-            "-c" => {
-                if let Some(c_string) = args.next() {
-                    cut_limit = match c_string.parse::<usize>() {
-                        Ok(x) => {x},
-                        Err(_) => {panic!("Invalid value for -b")},
-                    }
-                } else {
-                    panic!("No value specified for parameter -b");
-                }
-            }
-            "-l" => {
-                if let Some(l_string) = args.next() {
-                    sequence_length = match l_string.parse::<usize>() {
-                        Ok(x) => {x},
-                        Err(_) => {panic!("Invalid value for -l")},
-                    }
-                } else {
-                    panic!("No value specified for parameter -l");
-                }
-            }
-            _ => {
-                if arg.starts_with('-') {
-                    println!("Unknown argument {}", arg);
-                } else {
-                    println!("Unknown positional argument {}", arg);
-                }
-            }
-        }
-    }
-    // check for synthetic and run
-    if synthetic_data == true {
-        if number_of_iter == 0 {
-            panic!("Number of iterations can't be 0 for synthetic data benchmarking!");
-        }
-        if benchmarking == false {
-            panic!("Synthetic data can only be run in benchmarking mode!");
-        }
-        println!("Benchmarking Synthetic data for {} iterations, sequences of length: {} using k: {} band size: {}", number_of_iter, sequence_length, kmer_size, band_size);
-        run_synthetic_data_benchmark(kmer_size, sequence_length, number_of_iter, band_size, cut_limit);
-    }
-    // check for pacbio and run
-    if synthetic_data == false {
-        if benchmarking == true {
-            if number_of_iter == 0 {
-                panic!("Number of iterations can't be 0 for pacbio data benchmarking!");
-            }
-            println!("Benchmarking Pacbio data {} for {} iterations, using k: {} band size: {}", input_bam_path, number_of_iter, kmer_size, band_size);
-            run_pacbio_data_benchmark(kmer_size, number_of_iter, band_size, input_bam_path, cut_limit);
-        }
-        else {
-            make_output_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
-            println!("SS");
-        }
-    }
-}
-
 fn help() {
     println!("Usage: lcskgraph [OPTIONS]");
     println!("Options:\n -h, --help\tPrint help");
     println!(" --version\tPrint version information");
     println!(" -s \t\tSynthetic data, no output");
-    println!(" -p <IN> <OUT>\tPacbio data, input subread bam file path, output bam file path");
+    println!(" -p <IN> <OUT>\tPacbio data, input subread bam/fa file path, output fa file path");
     println!(" -t <N>\t\tBenchmarking, Number of iterations, default 10");
     println!(" -k <N>\t\tk for lcsk, default 10");
     println!(" -b <N>\t\tBand size for POA, default 200");
     println!(" -l <N>\t\tSequence length for synthetic data, default 10,000");
     println!(" -i <N>\t\tNumber of iterations for synthetic data or pacbio, default 0");
-    println!(" -c <N>\t\t Cut limit for sectioning the graph and query, off by default");
+    println!(" -c <N>\t\tCut limit for sectioning the graph and query, off by default");
     // exit the program
     exit(0x0100);
 }
@@ -420,42 +452,20 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
     for (index, reads) in new_read_set.iter().enumerate() {
         println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        //start
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        let file_path = format!("data/pacbio-{}.fa", index);
-        let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open(file_path)
-        .unwrap();
-        for (index2, string) in string_vec.iter().enumerate() {
-            if let Err(e) = writeln!(file, ">pacbio-{}-{}", index, index2) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-            if let Err(e) = writeln!(file, "{}", string) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-
-        let normal: (usize, usize, usize) = (0, 0, 0);
-        let lcsk: (usize, usize, usize) = (0, 0, 0);
-        let threaded: (usize, usize, usize) = (0, 0, 0);
-        //end
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
         println!("Read Number {}", index + 1);
-        println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
-        println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
-        println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
+        println!("Normal poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Threaded LCSK poa \tScore: {} \tTime: {}μs \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
     println!("=======================\nSummary Average of {} runs", num_of_iter);
-    println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
-    println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
-    println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
+    println!("Normal poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Threaded LCSK poa \tScore: {} \tTime: {}μs \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
 }
 
 fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_of_iter: usize, band_size: usize, cut_limit: usize) {
@@ -466,43 +476,20 @@ fn run_synthetic_data_benchmark (kmer_size: usize, sequence_length: usize, num_o
     for seed in 0..num_of_iter {
         println!("Progress {:.2}%", ((seed * 100) as f32 / num_of_iter as f32));
         let string_vec = get_random_sequences_from_generator(sequence_length, 3, seed);
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        //start
-        //let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
-        let file_path = format!("data/synthetic10-{}.fa", seed);
-        let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open(file_path)
-        .unwrap();
-        for (index, string) in string_vec.iter().enumerate() {
-            if let Err(e) = writeln!(file, ">Synthetic10-{}-{}", seed, index) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-            if let Err(e) = writeln!(file, "{}", string) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
-
-        let normal: (usize, usize, usize) = (0, 0, 0);
-        let lcsk: (usize, usize, usize) = (0, 0, 0);
-        let threaded: (usize, usize, usize) = (0, 0, 0);
-        //end
+        let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
         // print current seed results
         normal_sum = (normal_sum.0 + normal.0, normal_sum.1 + normal.1, normal_sum.2 + normal.2);
         lcsk_sum = (lcsk_sum.0 + lcsk.0, lcsk_sum.1 + lcsk.1, lcsk_sum.2 + lcsk.2);
         threaded_sum = (threaded_sum.0 + threaded.0, threaded_sum.1 + threaded.1, threaded_sum.2 + threaded.2);
         println!("Seed {}", seed);
-        println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
-        println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
-        println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
-        
+        println!("Normal poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", normal.0, normal.1, normal.2);
+        println!("LCSK poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", lcsk.0, lcsk.1, lcsk.2);
+        println!("Threaded LCSK poa \tScore: {} \tTime: {}μs \tMemory_usage: {}KB", threaded.0, threaded.1, threaded.2);
     }
     println!("=======================\nSummary Average of {} runs", num_of_iter);
-    println!("Normal poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
-    println!("LCSK poa \t\tScore: {} \tTime: {}meus \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
-    println!("Threaded LCSK poa \tScore: {} \tTime: {}meus \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
+    println!("Normal poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", normal_sum.0 / num_of_iter, normal_sum.1 / num_of_iter, normal_sum.2 / num_of_iter);
+    println!("LCSK poa \t\tScore: {} \tTime: {}μs \tMemory_usage: {}KB", lcsk_sum.0 / num_of_iter, lcsk_sum.1 / num_of_iter, lcsk_sum.2 / num_of_iter);
+    println!("Threaded LCSK poa \tScore: {} \tTime: {}μs \tMemory_usage: {}KB", threaded_sum.0 / num_of_iter, threaded_sum.1 / num_of_iter, threaded_sum.2 / num_of_iter);
     //io::stdin().read_line(&mut String::new()).unwrap();
 }
 
