@@ -37,4 +37,4 @@ cargo run --release -- -p "data/pacbio.fa" "output.fa" -b 200 -k 12
 
 If you are using LCSKPOA in your work, please cite:
 
-[LCSKPOA: Enabling banded semi-global partial order alignments via efficient and accurate backbone generation through extended lcsk++](https://www.biorxiv.org/content/10.1101/2024.02.08.579541v1)
+[LCSKPOA: Enabling banded semi-global partial order alignments via efficient and accurate backbone generation through extended lcsk++](https://www.biorxiv.org/content/10.1101/2024.07.18.604181v1)

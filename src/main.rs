@@ -162,7 +162,7 @@ fn arg_runner() {
 }
 
 fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_path: String, output_path: String) {
-    // get all the data from bam file
+    // get all the data from fa file
     let mut current_set = "".to_string();
     let mut temp_read = vec![];
     for (index, line) in read_to_string(&input_path).unwrap().lines().enumerate() {
@@ -223,7 +223,7 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
         // poa
         lcsk_aligner.custom_banded(query, &lcsk_path, band_size).add_to_graph();
     }
-    // get consensus 
+    // get consensus
     let consensus_u8 = lcsk_aligner.consensus();
     // write it to fa file
     let mut file = OpenOptions::new()
@@ -400,56 +400,26 @@ fn run_pacbio_data_benchmark (kmer_size: usize, num_of_iter: usize, band_size: u
     //println!("Processing Pacbio Data");
     let read_file_dir = input_path;
     // get data from bam file
-    let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
+    // get all the data from fa file    
+    //let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
     let mut read_set = vec![];
-    let mut current_set = "".to_string();
     let mut temp_read = vec![];
-    for record_option in bam.records().into_iter() {
-        match record_option {                                                                                                       
-            Ok(x) => {                                                                                                       
-                let record = x;                                                                                                         
-                let record_set = String::from_utf8(record.qname().to_vec()).unwrap().split("/").collect::<Vec<&str>>()[1].to_string();
-                if current_set == "".to_string() {
-                    //println!("Start here");
-                    current_set = record_set;
-                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
-                    //println!()
-                }
-                else if current_set == record_set {
-                    //println!("Just adding read");
-                    temp_read.push(String::from_utf8(record.seq().as_bytes()).unwrap());
-                }
-                else {
-                    //println!("Read set complete onto the next");
-                    current_set = record_set;
-                    read_set.push(temp_read);
-                    temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
-                    if read_set.len() >= num_of_iter {
-                        println!("Got {} sets exiting!", num_of_iter);
-                        break;
-                    }
-                }
-            },
-            Err(_) => {
-                break;
+    let mut pacbio_count = 0;
+    for (index, line) in read_to_string(&read_file_dir).unwrap().lines().enumerate() {
+        if index % 2 != 0 {
+            pacbio_count += 1;
+            temp_read.push(line.to_string());
+            // start processing when pacbio count is 3
+            if pacbio_count % 3 == 0 {
+                read_set.push(temp_read);
+                temp_read = vec![];
             }
         }
-    }
-    let mut new_read_set = vec![];
-    // reverse the reads and stuff
-    for reads in &read_set {
-        let mut temp_reads = vec![];
-        temp_reads.push(reads[0].clone());
-        temp_reads.push(reads[2].clone());
-        temp_reads.push(reads[4].clone());
-        //println!("{:?}", temp_reads.len());
-        new_read_set.push(temp_reads);
-
     }
     let mut normal_sum = (0, 0, 0);
     let mut threaded_sum = (0, 0, 0);
     let mut lcsk_sum = (0, 0, 0);
-    for (index, reads) in new_read_set.iter().enumerate() {
+    for (index, reads) in read_set.iter().enumerate() {
         println!("Progress {:.2}%", ((index * 100) as f32 / num_of_iter as f32));
         let string_vec = reads.clone();
         let (normal, lcsk, threaded) = lcsk_test_pipeline(string_vec, kmer_size, band_size, cut_limit);
