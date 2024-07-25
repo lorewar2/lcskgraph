@@ -12,7 +12,7 @@ use itertools::Itertools;
 pub type POAGraph = Graph<u8, i32, Directed, usize>;
 pub type HashMapFx<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>, query: &Vec<u8>) -> (Vec<(usize, usize, usize)>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>, Vec<Vec<u8>>, Vec<Vec<(usize, usize)>>) {    let mut current_cut_limit = cut_limit;
+pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, original_path: &Vec<(usize, usize)>, number_of_sequences: usize, graph: &POAGraph, cut_limit: usize, query_length: usize, topo_indices: Vec<usize>, query: &Vec<u8>) -> (Vec<usize>, Vec<Graph<u8, i32, Directed, usize>>, Vec<usize>, Vec<Vec<u8>>, Vec<Vec<(usize, usize)>>) {    let mut current_cut_limit = cut_limit;
     let mut section_graphs: Vec<Graph<u8, i32, Directed, usize>> = vec![];
     let mut section_queries = vec![];
     let mut section_lcsks = vec![];
@@ -23,12 +23,13 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     let mut node_tracker: Vec<usize> = vec![0; graph.node_count()];
     let mut this_is_head_node = true;
     let mut cut_fail_times = 0;
-    let cut_fail_limit = 1000; // for pacbio, to run cleanly lol
+    let cut_fail_limit = 1000; // for pacbio, to run cleanly
     let section_head_node = section_graph.add_node(graph.raw_nodes()[topo_indices[0]].weight);
     node_tracker[topo_indices[0]] = section_head_node.index();
     let mut topo_indices_index = 0;
     // add head node and stuff to the anchors
     let mut anchors= vec![(0, topo_indices[0], 0)]; // order in graph, graph index, query index
+    let mut section_ends = vec![];
     for (index, pos) in ascending_path.iter().enumerate() {
         let node_index = original_path[index].1;
         let mut cut_is_made_at_this_point = false;
@@ -56,7 +57,6 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
             else {
                 this_is_head_node = false;
             }
-            
             if topo_indices[topo_indices_index] == node_index {
                 topo_indices_index += 1;
                 break;
@@ -83,6 +83,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 // cut possible
                 // if yes select as anchor
                 anchors.push((pos.1, node_index, pos.0));
+                section_ends.push(node_tracker[topo_indices[topo_indices_index - 1]]);
                 // make the query stuff
                 let query_start = min(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
                 let query_end = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
@@ -175,7 +176,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
     section_lcsks.push(filtered_section_lcsk);
     //println!("SECTION LCSK {:?}", section_lcsks);
     //println!("{:?}", Dot::new(&graph.map(|_, n| (*n) as char, |_, e| *e)));
-    (anchors, section_graphs, node_tracker, section_queries, section_lcsks)
+    (section_ends, section_graphs, node_tracker, section_queries, section_lcsks)
 }
 
 pub fn try_to_make_the_cut(output_graph: &POAGraph, topo_index: usize, total_num_sequences: usize) -> bool {

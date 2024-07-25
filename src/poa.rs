@@ -915,7 +915,7 @@ impl Poa{
         self.memory_usage = (banded_cell_usage * mem::size_of::<TracebackCell>()) / 1024;
         traceback
     }
-    // need to convert this shit to use and ascending topo indices instead topo indices, extra input maybe just the hashmap
+    // need to convert this to use and ascending topo indices instead topo indices, extra input maybe just the hashmap
     pub fn custom_banded_threaded_section(&mut self, query: &Vec<u8>, lcsk_path: &Vec<(usize, usize)>, bandwidth: usize) -> Traceback {
         assert!(self.graph.node_count() != 0);
         // dimensions of the traceback matrix

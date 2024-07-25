@@ -3,8 +3,11 @@ mod poa;
 mod lcskgraphefficient;
 mod bit_tree;
 use std::{collections::HashMap, process::exit};
+use petgraph::Direction::Incoming;
 use poa::*;
-use petgraph::visit::Topo;
+use petgraph::visit::{Topo};
+use petgraph::graph::NodeIndex;
+use petgraph::{Directed, Graph};
 use crate::lcskgraphefficient::{find_sequence_in_graph, better_find_kmer_matches, lcskpp_graph, anchoring_lcsk_path_for_threading};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::time::Instant;
@@ -18,9 +21,8 @@ use std::fs::read_to_string;
 const KMER_SIZE: usize = 10;
 const SEQ_LEN: usize = 10000;
 const BAND_SIZE: usize = 10000;
-const SUB_SECTION_LEN: usize = 1000;
-const MIDDLE_SECTION_LEN: usize = 3162;
 
+pub type POAGraph = Graph<u8, i32, Directed, usize>;
 fn main() {
     arg_runner();
 }
@@ -149,10 +151,10 @@ fn arg_runner() {
             // check here the file is fa or bam
             let file_extension = input_bam_path.split(".").last().unwrap();
             if file_extension == "bam" {
-                make_output_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path);
+                make_output_file_from_subread_bam(kmer_size, band_size, input_bam_path, output_bam_path, cut_limit);
             }
             else if file_extension == "fa" {
-                make_output_file_from_subread_fa(kmer_size, band_size, input_bam_path, output_bam_path);
+                make_output_file_from_subread_fa(kmer_size, band_size, input_bam_path, output_bam_path, cut_limit);
             }
             else {
                 println!("Unknown input file type!");
@@ -161,7 +163,7 @@ fn arg_runner() {
     }
 }
 
-fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_path: String, output_path: String) {
+fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_path: String, output_path: String, cut_limit: usize) {
     // get all the data from fa file
     let mut current_set = "".to_string();
     let mut temp_read = vec![];
@@ -175,21 +177,22 @@ fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_pa
     }
     println!("Processing {} depth {}", input_path, temp_read.len());
     let now = Instant::now();
-    process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size);
+    process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size, cut_limit);
     let time = now.elapsed().as_micros() as usize;
     println!("Completed {} elapsed time {}μs", input_path, time);
 }
 
-fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_reads: Vec<String>, output_fa: &String, kmer_size: usize, band_size: usize) {
-    let mut lcsk_aligner = Aligner::new(2, -2, -2, &input_reads[0].as_bytes().to_vec(), 0, 0, band_size as i32);
+fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_reads: Vec<String>, output_fa: &String, kmer_size: usize, band_size: usize, cut_limit: usize) {
+    let lcsk_aligner = Aligner::new(2, -2, -2, &input_reads[0].as_bytes().to_vec(), 0, 0, band_size as i32);
     let mut all_paths: Vec<Vec<usize>> = vec![];
     let mut all_sequences: Vec<Vec<u8>> = vec![];
+    let mut children = vec![];
+    let mut output_graph = lcsk_aligner.graph().clone();
     // run lcskpoa with the strings 
     for index in 0..input_reads.len() {
         if index == 0 {
             continue;
         }
-        let output_graph = lcsk_aligner.graph();
         // initialize topology order and stuff
         // get topology ordering
         let mut topo = Topo::new(&output_graph);
@@ -205,7 +208,7 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
         // find the previous read path in graph
         let mut error_index = 0;
         loop {
-            let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (input_reads[index - 1].as_bytes().to_vec().clone(), output_graph, &topo_indices, &topo_map, error_index);
+            let (error_occured, temp_path, temp_sequence) = find_sequence_in_graph (input_reads[index - 1].as_bytes().to_vec().clone(), &output_graph, &topo_indices, &topo_map, error_index);
             if error_index > 10 {
                 break;
             }
@@ -218,10 +221,36 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
         }
         // get the lcsk path
         let query = &input_reads[index].as_bytes().to_vec();
+        let mut full_consensus = vec![];
         let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&query, &all_sequences, &all_paths, kmer_size);
-        let (lcsk_path, _lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
+        let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
         // poa
-        lcsk_aligner.custom_banded(query, &lcsk_path, band_size).add_to_graph();
+        if lcsk_path.len() > 0 {
+            // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
+            let (section_ends, section_graphs, _node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, &output_graph, cut_limit,  query.len(), topo_indices, &query);
+            for anchor_index in 0..section_ends.len() {
+                let section_query = section_queries[anchor_index].clone();
+                let section_lcsk = section_lcsks[anchor_index].clone();
+                let section_graph = section_graphs[anchor_index].clone();
+                //println!("section query len {} section graph len {}", section_query.len(), section_graph.node_count());
+                children.push(thread::spawn(move || {
+                    let mut aligner = Aligner::empty(2, -2, -2, 0, 0, band_size as i32);
+                    aligner.custom_banded_threaded(&section_query, &section_lcsk, band_size, section_graph).add_to_graph();
+                    let updated_graph = aligner.graph().clone();
+                    let section_consensus = aligner.consensus();
+                    (updated_graph, section_consensus)
+                }));
+            }
+            let mut original_graph_end = 0;
+            // get tall the section scores and add them up
+            for child_index in 0..children.len() {
+                let (section_graph, section_consensus) = children.pop().unwrap().join().unwrap();
+                full_consensus = [full_consensus, section_consensus].concat();
+                // update the graph here
+                (output_graph, original_graph_end) = add_new_section_graph_to_full_graph(output_graph, section_graph, child_index, original_graph_end, &section_ends, index + 1);
+            }
+        }
+        //lcsk_aligner.custom_banded(query, &lcsk_path, band_size).add_to_graph();
     }
     // get consensus
     let consensus_u8 = lcsk_aligner.consensus();
@@ -240,7 +269,54 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
     }
 }
 
-fn make_output_file_from_subread_bam (kmer_size: usize, band_size: usize, input_path: String, output_path: String) {
+fn add_new_section_graph_to_full_graph (mut original_graph: POAGraph, section_graph: POAGraph, section_index: usize, mut original_graph_end: usize, section_ends: &Vec<usize>, max_weight: usize) -> (POAGraph, usize) {
+    // this is the first one
+    if section_index == 0 {
+        original_graph = section_graph;
+        original_graph_end = section_ends[section_index];
+    }
+    else {
+        // go through the nodes in the section graph and add them to the original graph
+        let section_end_original = section_ends[section_index];
+        // add the first node (node 0) and make the connection with original graph end
+        // get the topological ordering and go through until we find node 0
+        let mut topo = Topo::new(&section_graph);
+        let mut node_tracker = vec![0; section_graph.node_count()]; // index is the sectional graph node index value is the original graph node index
+        while let Some(next_node) = topo.next(&section_graph) {
+            if next_node.index() == 0 {
+                // add the first node and make the connection
+                let added_node = original_graph.add_node(section_graph.raw_nodes()[0].weight);
+                node_tracker[next_node.index()] = added_node.index();
+                original_graph.add_edge(NodeIndex::new(original_graph_end), added_node, max_weight as i32);
+                break;
+            }
+        }
+        // add nodes while making connections, if the node is the section end save it as original graph end (new one though)
+        while let Some(next_node) = topo.next(&section_graph) {
+            // final node
+            let added_node = original_graph.add_node(section_graph.raw_nodes()[next_node.index()].weight);
+            node_tracker[next_node.index()] = added_node.index();
+            // find the weight between last node and new node in section graph
+            let incoming_nodes: Vec<NodeIndex<usize>> = section_graph.neighbors_directed(next_node, Incoming).collect();
+            for incoming_node in incoming_nodes {
+                let mut edges = section_graph.edges_connecting(incoming_node, next_node);
+                let mut incoming_weight = 0;
+                while let Some(edge) = edges.next() {
+                    incoming_weight += edge.weight().clone();
+                }
+                // find the incoming node in the original graph!!
+                let original_graph_incoming_node = node_tracker[incoming_node.index()];
+                original_graph.add_edge(NodeIndex::new(original_graph_incoming_node), added_node, incoming_weight);
+            }
+            if next_node.index() == section_end_original {
+                original_graph_end = added_node.index();
+            }
+        }
+    }
+    (original_graph, original_graph_end)
+}
+
+fn make_output_file_from_subread_bam (kmer_size: usize, band_size: usize, input_path: String, output_path: String, cut_limit: usize) {
     let read_file_dir = input_path;
     // get all the data from bam file
     let mut bam = bam::Reader::from_path(&read_file_dir).unwrap();
@@ -266,7 +342,7 @@ fn make_output_file_from_subread_bam (kmer_size: usize, band_size: usize, input_
                     // process here
                     println!("Processing read {} depth {}", current_set, temp_read.len());
                     let now = Instant::now();
-                    process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size);
+                    process_the_reads_get_consensus_and_save_in_fa (&current_set, temp_read, &output_path, kmer_size, band_size, cut_limit);
                     let time = now.elapsed().as_micros() as usize;
                     println!("Completed {} time elapsed {}μs", current_set, time);
                     temp_read = vec![String::from_utf8(record.seq().as_bytes()).unwrap()];
