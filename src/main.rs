@@ -182,12 +182,10 @@ fn make_output_file_from_subread_fa(kmer_size: usize, band_size: usize, input_pa
     println!("Completed {} elapsed time {}μs", input_path, time);
 }
 
-fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_reads: Vec<String>, output_fa: &String, kmer_size: usize, band_size: usize, cut_limit: usize) {
-    let lcsk_aligner = Aligner::new(2, -2, -2, &input_reads[0].as_bytes().to_vec(), 0, 0, band_size as i32);
+fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_reads: Vec<String>, output_fa: &String, kmer_size: usize, band_size: usize, _cut_limit: usize) {
+    let mut lcsk_aligner = Aligner::new(2, -2, -2, &input_reads[0].as_bytes().to_vec(), 0, 0, band_size as i32);
     let mut all_paths: Vec<Vec<usize>> = vec![];
     let mut all_sequences: Vec<Vec<u8>> = vec![];
-    let mut children = vec![];
-    let mut output_graph = lcsk_aligner.graph().clone();
     // run lcskpoa with the strings 
     for index in 0..input_reads.len() {
         if index == 0 {
@@ -195,6 +193,7 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
         }
         // initialize topology order and stuff
         // get topology ordering
+        let output_graph = lcsk_aligner.graph();
         let mut topo = Topo::new(&output_graph);
         // go through the nodes topologically // make a hashmap with node_index as key and incrementing indices as value
         let mut topo_indices = vec![];
@@ -221,36 +220,10 @@ fn process_the_reads_get_consensus_and_save_in_fa (input_name: &String, input_re
         }
         // get the lcsk path
         let query = &input_reads[index].as_bytes().to_vec();
-        let mut full_consensus = vec![];
         let (kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, kmer_graph_path) = better_find_kmer_matches(&query, &all_sequences, &all_paths, kmer_size);
-        let (lcsk_path, lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
+        let (lcsk_path, _lcsk_path_unconverted, _k_new_score) = lcskpp_graph(kmer_pos_vec, kmer_path_vec, kmers_previous_node_in_paths, all_paths.len(), kmer_size, kmer_graph_path, &topo_indices);
         // poa
-        if lcsk_path.len() > 0 {
-            // find the anchors and graph sections (TODO intergrate query section finding in this and sections lcsk path)
-            let (section_ends, section_graphs, _node_tracker, section_queries, section_lcsks) = anchoring_lcsk_path_for_threading(&lcsk_path_unconverted, &lcsk_path, 2, &output_graph, cut_limit,  query.len(), topo_indices, &query);
-            for anchor_index in 0..section_ends.len() {
-                let section_query = section_queries[anchor_index].clone();
-                let section_lcsk = section_lcsks[anchor_index].clone();
-                let section_graph = section_graphs[anchor_index].clone();
-                //println!("section query len {} section graph len {}", section_query.len(), section_graph.node_count());
-                children.push(thread::spawn(move || {
-                    let mut aligner = Aligner::empty(2, -2, -2, 0, 0, band_size as i32);
-                    aligner.custom_banded_threaded(&section_query, &section_lcsk, band_size, section_graph).add_to_graph();
-                    let updated_graph = aligner.graph().clone();
-                    let section_consensus = aligner.consensus();
-                    (updated_graph, section_consensus)
-                }));
-            }
-            let mut original_graph_end = 0;
-            // get tall the section scores and add them up
-            for child_index in 0..children.len() {
-                let (section_graph, section_consensus) = children.pop().unwrap().join().unwrap();
-                full_consensus = [full_consensus, section_consensus].concat();
-                // update the graph here
-                (output_graph, original_graph_end) = add_new_section_graph_to_full_graph(output_graph, section_graph, child_index, original_graph_end, &section_ends, index + 1);
-            }
-        }
-        //lcsk_aligner.custom_banded(query, &lcsk_path, band_size).add_to_graph();
+        lcsk_aligner.custom_banded(query, &lcsk_path, band_size).add_to_graph();
     }
     // get consensus
     let consensus_u8 = lcsk_aligner.consensus();

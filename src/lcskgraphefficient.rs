@@ -83,7 +83,7 @@ pub fn anchoring_lcsk_path_for_threading (ascending_path: &Vec<(usize, usize)>, 
                 // cut possible
                 // if yes select as anchor
                 anchors.push((pos.1, node_index, pos.0));
-                section_ends.push(node_tracker[topo_indices[topo_indices_index - 1]]);
+                section_ends.push(node_tracker[node_index]);
                 // make the query stuff
                 let query_start = min(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
                 let query_end = max(anchors[anchors.len() - 1].2, anchors[anchors.len() - 2].2);
